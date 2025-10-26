@@ -27,9 +27,7 @@ import {
   Square,
   Filter,
   Shuffle,
-  Star,
-  Flag,
-  X
+  Star
 } from "lucide-react";
 import { searchService } from "@/services/searchService";
 import { sessionSampler } from "@/services/sessionSampler";
@@ -1178,9 +1176,8 @@ const Practice = () => {
                 {currentQuestion.question}
               </CardTitle>
               
-              {/* Flag Buttons (Epic 1.3) */}
+              {/* Favorite Button */}
               <div className="flex items-center gap-2 mb-2">
-                <span className="text-xs text-muted-foreground mr-1">Quick actions:</span>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -1191,38 +1188,9 @@ const Practice = () => {
                       : 'text-muted-foreground hover:text-amber-600'
                   }`}
                 >
-                  <Star className={`h-3.5 w-3.5 mr-1 ${
+                  <Star className={`h-3.5 w-3.5 ${
                     questionFlags[currentQuestion.id]?.flag_type === 'favorite' ? 'fill-current' : ''
                   }`} />
-                  <span className="text-xs">Favorite</span>
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleToggleFlag(currentQuestion.id, 'needs_work')}
-                  className={`h-7 px-2 ${
-                    questionFlags[currentQuestion.id]?.flag_type === 'needs_work'
-                      ? 'bg-red-100 text-red-700 hover:bg-red-200'
-                      : 'text-muted-foreground hover:text-red-600'
-                  }`}
-                >
-                  <Flag className={`h-3.5 w-3.5 mr-1 ${
-                    questionFlags[currentQuestion.id]?.flag_type === 'needs_work' ? 'fill-current' : ''
-                  }`} />
-                  <span className="text-xs">Needs Work</span>
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleToggleFlag(currentQuestion.id, 'skipped')}
-                  className={`h-7 px-2 ${
-                    questionFlags[currentQuestion.id]?.flag_type === 'skipped'
-                      ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                      : 'text-muted-foreground hover:text-gray-600'
-                  }`}
-                >
-                  <X className={`h-3.5 w-3.5 mr-1`} />
-                  <span className="text-xs">Skip</span>
                 </Button>
               </div>
               
