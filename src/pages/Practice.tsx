@@ -105,6 +105,7 @@ const Practice = () => {
   const [answers, setAnswers] = useState<Map<string, string>>(new Map());
   const [questionTimers, setQuestionTimers] = useState<Map<string, number>>(new Map());
   const [currentQuestionStartTime, setCurrentQuestionStartTime] = useState<number>(Date.now());
+  const [timerTick, setTimerTick] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -631,9 +632,9 @@ const Practice = () => {
   // Update timer display every second
   useEffect(() => {
     const interval = setInterval(() => {
-      // Force re-render to update timer display
+      // Increment timerTick to force re-render and update timer display
       if (currentQuestion) {
-        setCurrentQuestionStartTime(prev => prev);
+        setTimerTick(prev => prev + 1);
       }
     }, 1000);
     return () => clearInterval(interval);
@@ -681,7 +682,8 @@ const Practice = () => {
     );
   }
 
-  if (isLoading) {
+  // Only show full-screen loading during initial load, not during setup configuration
+  if (isLoading && sessionState !== 'setup') {
     return (
       <div className="min-h-screen bg-background">
         <Navigation />
