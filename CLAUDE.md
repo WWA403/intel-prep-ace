@@ -549,6 +549,37 @@ ALTER TABLE interview_questions ADD COLUMN (
 
 **Expected Impact**: Faster processing, fewer database calls
 
+##### **Hotfix: RLS Policy for cv_job_comparisons (Post-Phase 3) - ✅ COMPLETED**
+**Issue**: 406 Not Acceptable error when querying cv_job_comparisons by search_id
+**Root Cause**: RLS policy only checked `auth.uid() = user_id`, but frontend queries by `search_id`. PostgREST couldn't apply the policy to this query pattern, resulting in 406 error.
+
+**Solution**:
+Add a secondary RLS policy that allows users to view cv_job_comparisons through the search_id relationship:
+```sql
+CREATE POLICY "Users can view CV comparisons for their searches"
+  ON public.cv_job_comparisons FOR SELECT
+  USING (
+    -- Option 1: Direct user_id match (backward compatibility)
+    auth.uid() = user_id
+    OR
+    -- Option 2: Access through search_id relationship (what the frontend uses)
+    auth.uid() IN (SELECT user_id FROM public.searches WHERE id = cv_job_comparisons.search_id)
+  );
+```
+
+**Changes Made**:
+- ✅ Created migration: `supabase/migrations/20251101000001_fix_cv_job_comparisons_rls.sql`
+- ✅ Deployed RLS policy fix to production
+- ✅ Fixed 406 errors on cv_job_comparisons queries
+
+**Impact**:
+- ✅ cv_job_comparisons queries now return 200 (success)
+- ✅ Frontend can load comparison data for completed searches
+- ✅ No more PostgREST 406 Not Acceptable errors
+
+**Deployment Status**:
+- ✅ Migration 20251101000001_fix_cv_job_comparisons_rls.sql applied to production
+
 ---
 
 #### **Summary of Completed Work (November 2025)**
