@@ -976,14 +976,7 @@ async function processResearchAsync(
     console.log("Storing final results...");
 
     // CHECKPOINT 1: Save interview stages immediately after synthesis
-    console.log("💾 CHECKPOINT: Saving interview stages...");
-    await supabase
-      .from("searches")
-      .update({ 
-        search_status: "processing",
-        progress_message: "Saving interview stages and basic questions..." 
-      })
-      .eq("id", searchId);
+    console.log("💾 CHECKPOINT 1: Saving interview stages and questions...");
 
     // Step 5: Store interview stages and questions in database
     for (const stage of synthesisResult.interview_stages) {
@@ -1029,14 +1022,7 @@ async function processResearchAsync(
     }
 
     // CHECKPOINT 2: Save CV analysis immediately
-    console.log("💾 CHECKPOINT: Saving CV analysis...");
-    await supabase
-      .from("searches")
-      .update({ 
-        search_status: "processing",
-        progress_message: "Saving CV analysis and job matching..." 
-      })
-      .eq("id", searchId);
+    console.log("💾 CHECKPOINT 2: Saving CV analysis...");
 
     // Step 6: Save CV analysis if provided
     if (cv && cvAnalysis) {
@@ -1087,19 +1073,12 @@ async function processResearchAsync(
     }
 
     // CHECKPOINT 3: Save enhanced analysis
-    console.log("💾 CHECKPOINT: Saving enhanced analysis and comparisons...");
-    await supabase
-      .from("searches")
-      .update({ 
-        search_status: "processing",
-        progress_message: "Finalizing analysis and enhanced questions..." 
-      })
-      .eq("id", searchId);
+    console.log("💾 CHECKPOINT 3: Saving enhanced analysis and comparisons...");
 
     // Step 7: Store enhanced question bank and comparison data
     if (cvJobComparison) {
       try {
-        await supabase
+        const { data, error } = await supabase
           .from("cv_job_comparisons")
           .upsert({
             search_id: searchId,
@@ -1113,8 +1092,26 @@ async function processResearchAsync(
           }, {
             onConflict: 'search_id'
           });
+
+        if (error) {
+          console.error("❌ CV Job Comparison upsert error:", {
+            code: error.code,
+            message: error.message,
+            details: error.details,
+            hint: error.hint
+          });
+          throw error;
+        }
+
+        console.log("✅ Successfully saved CV job comparison");
       } catch (dbError) {
-        console.warn("Failed to save CV job comparison:", dbError);
+        console.error("Failed to save CV job comparison:", dbError);
+        // Log but continue - comparison save failure shouldn't block completion
+        logger.log('CV_COMPARISON_SAVE_ERROR', 'DATABASE', {
+          error: dbError.message,
+          userId,
+          searchId
+        });
       }
     }
 
@@ -1202,17 +1199,30 @@ async function processResearchAsync(
 
     // Step 8: Update search status to completed
     try {
-      await supabase
+      const { error: updateError } = await supabase
         .from("searches")
-        .update({ 
+        .update({
           search_status: "completed",
           cv_job_comparison: cvJobComparison,
           preparation_priorities: cvJobComparison?.preparation_priorities || [],
           overall_fit_score: cvJobComparison?.overall_fit_score || 0
         })
         .eq("id", searchId);
+
+      if (updateError) {
+        console.error("❌ Status update error:", {
+          code: updateError.code,
+          message: updateError.message,
+          details: updateError.details
+        });
+        throw updateError;
+      }
+
+      console.log("✅ Successfully updated search status to completed");
     } catch (updateError) {
-      console.warn("Failed to update search status:", updateError);
+      console.error("Failed to update search status:", updateError);
+      // Even if status update fails, still mark as completed in progress tracker
+      // so frontend knows research is done
     }
 
     // Mark research as completed
