@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.43.2";
 import { SearchLogger } from "../_shared/logger.ts";
 import { RESEARCH_CONFIG } from "../_shared/config.ts";
-import { ProgressTracker, PROGRESS_STEPS, CONCURRENT_TIMEOUTS, executeWithTimeout, executeWithTimeoutSafe } from "../_shared/progress-tracker.ts";
+import { ProgressTracker, PROGRESS_STEPS, CONCURRENT_TIMEOUTS, executeWithTimeout, executeWithTimeoutSafe, isValidData, validateFetchResponse } from "../_shared/progress-tracker.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -84,15 +84,15 @@ interface AIResearchOutput {
   preparation_priorities: string[];
 }
 
-// Call other microservices for data gathering with timeout handling
+// Call other microservices for data gathering with timeout handling and validation
 async function gatherCompanyData(company: string, role?: string, country?: string, searchId?: string) {
   try {
     console.log("Calling company-research function...");
-    
-    // Set a timeout for the company research call (25 seconds)
+
+    // Set a timeout for the company research call (using updated CONCURRENT_TIMEOUTS)
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 25000);
-    
+    const timeoutId = setTimeout(() => controller.abort(), CONCURRENT_TIMEOUTS.companyResearch);
+
     const response = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/company-research`, {
       method: 'POST',
       headers: {
@@ -112,14 +112,23 @@ async function gatherCompanyData(company: string, role?: string, country?: strin
 
     if (response.ok) {
       const result = await response.json();
-      return result.company_insights;
+      const companyInsights = result.company_insights;
+
+      // Validate we got actual data, not empty response
+      if (isValidData(companyInsights)) {
+        console.log("✓ Company research returned valid data");
+        return companyInsights;
+      } else {
+        console.warn("Company research returned empty data");
+        return null;
+      }
     }
-    
-    console.warn("Company research failed, continuing without data");
+
+    console.warn(`Company research failed with status ${response.status}, continuing without data`);
     return null;
   } catch (error) {
-    if (error.name === 'AbortError') {
-      console.warn("Company research timed out after 25 seconds, continuing without data");
+    if (error instanceof Error && error.name === 'AbortError') {
+      console.warn(`Company research timed out after ${CONCURRENT_TIMEOUTS.companyResearch}ms, continuing without data`);
     } else {
       console.error("Error calling company-research:", error);
     }
@@ -135,11 +144,11 @@ async function gatherJobData(roleLinks: string[], searchId: string, company?: st
 
   try {
     console.log("Calling job-analysis function...");
-    
-    // Set a timeout for the job analysis call (30 seconds)
+
+    // Set a timeout for the job analysis call (using updated CONCURRENT_TIMEOUTS)
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000);
-    
+    const timeoutId = setTimeout(() => controller.abort(), CONCURRENT_TIMEOUTS.jobAnalysis);
+
     const response = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/job-analysis`, {
       method: 'POST',
       headers: {
@@ -159,14 +168,23 @@ async function gatherJobData(roleLinks: string[], searchId: string, company?: st
 
     if (response.ok) {
       const result = await response.json();
-      return result.job_requirements;
+      const jobRequirements = result.job_requirements;
+
+      // Validate we got actual data, not empty response
+      if (isValidData(jobRequirements)) {
+        console.log("✓ Job analysis returned valid data");
+        return jobRequirements;
+      } else {
+        console.warn("Job analysis returned empty data");
+        return null;
+      }
     }
-    
-    console.warn("Job analysis failed, continuing without data");
+
+    console.warn(`Job analysis failed with status ${response.status}, continuing without data`);
     return null;
   } catch (error) {
-    if (error.name === 'AbortError') {
-      console.warn("Job analysis timed out after 30 seconds, continuing without data");
+    if (error instanceof Error && error.name === 'AbortError') {
+      console.warn(`Job analysis timed out after ${CONCURRENT_TIMEOUTS.jobAnalysis}ms, continuing without data`);
     } else {
       console.error("Error calling job-analysis:", error);
     }
@@ -182,11 +200,11 @@ async function gatherCVData(cv: string, userId: string) {
 
   try {
     console.log("Calling cv-analysis function...");
-    
-    // Set a timeout for the CV analysis call (20 seconds)
+
+    // Set a timeout for the CV analysis call (using updated CONCURRENT_TIMEOUTS)
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 20000);
-    
+    const timeoutId = setTimeout(() => controller.abort(), CONCURRENT_TIMEOUTS.cvAnalysis);
+
     const response = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/cv-analysis`, {
       method: 'POST',
       headers: {
@@ -204,14 +222,22 @@ async function gatherCVData(cv: string, userId: string) {
 
     if (response.ok) {
       const result = await response.json();
-      return result; // Return the full result with both aiAnalysis and parsedData
+
+      // Validate we got actual data, not empty response
+      if (isValidData(result)) {
+        console.log("✓ CV analysis returned valid data");
+        return result; // Return the full result with both aiAnalysis and parsedData
+      } else {
+        console.warn("CV analysis returned empty data");
+        return null;
+      }
     }
-    
-    console.warn("CV analysis failed, continuing without data");
+
+    console.warn(`CV analysis failed with status ${response.status}, continuing without data`);
     return null;
   } catch (error) {
-    if (error.name === 'AbortError') {
-      console.warn("CV analysis timed out after 20 seconds, continuing without data");
+    if (error instanceof Error && error.name === 'AbortError') {
+      console.warn(`CV analysis timed out after ${CONCURRENT_TIMEOUTS.cvAnalysis}ms, continuing without data`);
     } else {
       console.error("Error calling cv-analysis:", error);
     }

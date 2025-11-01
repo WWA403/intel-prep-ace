@@ -80,7 +80,7 @@ export function useSearchProgress(
 ) {
   const {
     enabled = true,
-    pollInterval = 2000, // Poll every 2 seconds
+    pollInterval = 2000, // Poll every 2 seconds initially
     retryOnFailure = true
   } = options;
   const queryClient = useQueryClient();
@@ -89,25 +89,50 @@ export function useSearchProgress(
     queryKey: ['search-progress', searchId],
     queryFn: () => fetchSearchProgress(searchId!),
     enabled: enabled && !!searchId,
-    
-    // Polling configuration
+
+    // Adaptive polling configuration (Phase 3 improvement)
+    // Poll more frequently in first 30s, then back off to reduce load
     refetchInterval: (query) => {
       const current = query.state.data as SearchProgress | undefined;
+
       // Stop polling when search is completed or failed
       if (!current || current.status === 'completed' || current.status === 'failed') {
         return false;
       }
+
+      // Adaptive polling: faster at start, slower as time goes on
+      if (current.started_at) {
+        const elapsedMs = Date.now() - new Date(current.started_at).getTime();
+
+        // First 30 seconds: poll every 2 seconds (aggressive)
+        if (elapsedMs < 30000) {
+          return pollInterval;
+        }
+
+        // After 30 seconds: poll every 5 seconds (reduced load)
+        if (elapsedMs < 60000) {
+          return 5000;
+        }
+
+        // After 60 seconds: poll every 10 seconds (minimal load)
+        return 10000;
+      }
+
+      // Default if no started_at
       return pollInterval;
     },
-    
+
     // Retry configuration
     retry: retryOnFailure ? 3 : false,
-    retryDelay: 1000,
-    
+    retryDelay: (attemptIndex) => {
+      // Exponential backoff for retries: 1s, 2s, 4s
+      return Math.min(1000 * Math.pow(2, attemptIndex), 8000);
+    },
+
     // Cache configuration
-    staleTime: 1000, // Consider data fresh for 1 second
-    gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
-    
+    staleTime: 500, // Consider data fresh for 500ms
+    gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
+
     // Background refetch settings
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
@@ -159,31 +184,60 @@ export function useIsSearchProcessing(searchId: string | null) {
  */
 export function useEstimatedCompletionTime(searchId: string | null) {
   const { data: search } = useSearchProgress(searchId);
-  
+
   if (!search || search.status !== 'processing' || !search.started_at) {
     return null;
   }
-  
+
   const startTime = new Date(search.started_at).getTime();
   const currentTime = Date.now();
   const elapsedTime = currentTime - startTime;
   const progress = search.progress_percentage || 0;
-  
+
   if (progress <= 0) {
     return null;
   }
-  
+
   // Estimate total time based on current progress
   const estimatedTotalTime = (elapsedTime / progress) * 100;
   const remainingTime = estimatedTotalTime - elapsedTime;
-  
+
   // Cap at reasonable limits
   const remainingSeconds = Math.max(0, Math.min(60, Math.round(remainingTime / 1000)));
-  
+
   return {
     remainingSeconds,
     estimatedCompletion: new Date(currentTime + remainingTime),
     elapsedSeconds: Math.round(elapsedTime / 1000)
+  };
+}
+
+/**
+ * Hook for detecting stalled jobs (Phase 3 improvement)
+ * A job is considered stalled if:
+ * - Status is 'processing'
+ * - No updates for >30 seconds
+ * Returns stalledfor how long (in seconds)
+ */
+export function useSearchStallDetection(searchId: string | null) {
+  const { data: search } = useSearchProgress(searchId);
+
+  if (!search || search.status !== 'processing') {
+    return {
+      isStalled: false,
+      stalledSeconds: 0,
+    };
+  }
+
+  const lastUpdateTime = new Date(search.updated_at).getTime();
+  const currentTime = Date.now();
+  const secondsSinceUpdate = Math.round((currentTime - lastUpdateTime) / 1000);
+  const stallThresholdSeconds = 30;
+
+  return {
+    isStalled: secondsSinceUpdate > stallThresholdSeconds,
+    stalledSeconds: Math.max(0, secondsSinceUpdate - stallThresholdSeconds),
+    secondsSinceUpdate,
   };
 }
 

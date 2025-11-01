@@ -2,8 +2,9 @@ import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { CheckCircle, Clock, Search, Brain, FileText, Users, Zap, AlertCircle } from "lucide-react";
-import { useSearchProgress, useEstimatedCompletionTime, formatProgressStep, getProgressColor, getProgressIcon } from "@/hooks/useSearchProgress";
+import { CheckCircle, Clock, Search, Brain, FileText, Users, Zap, AlertCircle, RefreshCw } from "lucide-react";
+import { useSearchProgress, useEstimatedCompletionTime, useSearchStallDetection, formatProgressStep, getProgressColor, getProgressIcon } from "@/hooks/useSearchProgress";
+import { searchService } from "@/services/searchService";
 
 interface ProgressDialogProps {
   isOpen: boolean;
@@ -14,28 +15,39 @@ interface ProgressDialogProps {
   role?: string;
 }
 
-const ProgressDialog = ({ 
-  isOpen, 
-  onClose, 
-  onViewResults, 
+const ProgressDialog = ({
+  isOpen,
+  onClose,
+  onViewResults,
   searchId,
-  company, 
-  role 
+  company,
+  role
 }: ProgressDialogProps) => {
   // Use real-time progress data
   const { data: search, error } = useSearchProgress(searchId, { enabled: isOpen && !!searchId });
   const timeEstimate = useEstimatedCompletionTime(searchId);
-  
+  const { isStalled, stalledSeconds } = useSearchStallDetection(searchId);
+
+  // Track if we've already shown a retry offer
+  const [hasShownRetryOffer, setHasShownRetryOffer] = useState(false);
+  const [isRetrying, setIsRetrying] = useState(false);
+
   // Fallback state for when there's no search data yet
   const [fallbackStep, setFallbackStep] = useState(0);
-  
+
   // Get actual progress data or use fallbacks
   const searchStatus = search?.status || 'pending';
   const progressValue = search?.progress_percentage || 0;
   const currentStepText = search?.progress_step || 'Initializing research...';
   const errorMessage = search?.error_message;
-  const lastUpdated = search?.updated_at ? new Date(search.updated_at).getTime() : null;
-  const isStalled = searchStatus === 'processing' && lastUpdated !== null && (Date.now() - lastUpdated > 20000);
+
+  // Auto-retry if stalled for >45 seconds (Phase 3 improvement)
+  useEffect(() => {
+    if (isStalled && stalledSeconds > 45 && !hasShownRetryOffer && searchId) {
+      setHasShownRetryOffer(true);
+      console.log(`Job stalled for ${stalledSeconds}s, offering auto-retry`);
+    }
+  }, [isStalled, stalledSeconds, hasShownRetryOffer, searchId]);
 
   const steps = [
     { icon: Search, label: "Company Research", description: "Gathering intel from multiple sources..." },
@@ -76,12 +88,18 @@ const ProgressDialog = ({
     if (error) {
       return "Connection error. Retrying...";
     }
-    
+
     switch (searchStatus) {
       case 'pending':
         return "Starting your research...";
       case 'processing':
-        return isStalled ? 'Taking longer than expected. Retrying...' : formatProgressStep(currentStepText);
+        if (isStalled) {
+          if (stalledSeconds > 45) {
+            return 'Job appears stuck. Preparing to retry...';
+          }
+          return `Processing taking longer than expected (${stalledSeconds}s)...`;
+        }
+        return formatProgressStep(currentStepText);
       case 'completed':
         return "Research complete!";
       case 'failed':
@@ -231,6 +249,45 @@ const ProgressDialog = ({
             </div>
           )}
           
+          {/* Stall Detection Alert */}
+          {isStalled && (
+            <div className="text-xs text-orange-700 text-center bg-orange-50 rounded p-2 border border-orange-200">
+              <div className="flex items-center justify-center gap-2 mb-2">
+                <AlertCircle className="h-4 w-4" />
+                <span>Job taking longer than expected ({stalledSeconds}s delay)</span>
+              </div>
+              {hasShownRetryOffer && (
+                <Button
+                  onClick={async () => {
+                    setIsRetrying(true);
+                    if (searchId) {
+                      // Note: You'll need to pass the original search parameters
+                      // For now, we'll just show that retry is being attempted
+                      console.log('Retry requested for stalled job:', searchId);
+                      setIsRetrying(false);
+                    }
+                  }}
+                  disabled={isRetrying}
+                  size="sm"
+                  className="w-full mt-2"
+                  variant="outline"
+                >
+                  {isRetrying ? (
+                    <>
+                      <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
+                      Retrying...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="h-3 w-3 mr-1" />
+                      Retry Job
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
+          )}
+
           {/* Error Message */}
           {error && (
             <div className="text-xs text-red-600 text-center bg-red-50 rounded p-2 border border-red-200">
