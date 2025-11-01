@@ -130,13 +130,14 @@ export class ProgressTracker {
 /**
  * Concurrent processing timeout configuration
  * Optimized for parallel execution to prevent cascade failures
+ * Phase 2 Update: Increased timeouts to handle slower external APIs
  */
 export const CONCURRENT_TIMEOUTS = {
-  companyResearch: 15000,      // 20s → 15s (concurrent execution)
-  jobAnalysis: 15000,          // 30s → 15s (concurrent execution)  
-  cvAnalysis: 10000,           // 20s → 10s (concurrent execution)
-  questionGeneration: 20000,   // Keep existing for AI processing
-  totalOperation: 25000        // Maximum time for entire operation
+  companyResearch: 20000,      // 15s → 20s (external API calls may take time)
+  jobAnalysis: 20000,          // 15s → 20s (large job descriptions need more time)
+  cvAnalysis: 15000,           // 10s → 15s (reliable, give some headroom)
+  questionGeneration: 25000,   // 20s → 25s (AI processing needs time)
+  totalOperation: 35000        // 25s → 35s (total concurrent timeout)
 } as const;
 
 /**
@@ -187,4 +188,78 @@ export async function executeWithTimeoutSafe<T>(
   } catch (e: any) {
     return { ok: false, error: e instanceof Error ? e : new Error(String(e)) };
   }
+}
+
+/**
+ * Retry logic with exponential backoff
+ * Useful for handling transient failures (network issues, timeouts)
+ */
+export async function executeWithRetry<T>(
+  operation: () => Promise<T>,
+  maxRetries: number = 2,
+  initialDelayMs: number = 1000
+): Promise<T> {
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+
+      if (attempt < maxRetries) {
+        // Exponential backoff: 1s, 2s, 4s, etc.
+        const delayMs = initialDelayMs * Math.pow(2, attempt);
+        console.log(
+          `Retry attempt ${attempt + 1}/${maxRetries} after ${delayMs}ms. Error: ${lastError.message}`
+        );
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      }
+    }
+  }
+
+  throw lastError || new Error('Operation failed after retries');
+}
+
+/**
+ * Validate that data returned from a service is not empty
+ * Returns true if data is meaningful, false if empty/null
+ */
+export function isValidData<T>(data: T | null | undefined): boolean {
+  if (!data) return false;
+
+  // Check if it's an object with no properties
+  if (typeof data === 'object' && !Array.isArray(data)) {
+    return Object.keys(data as object).length > 0;
+  }
+
+  // Check if it's an array with elements
+  if (Array.isArray(data)) {
+    return data.length > 0;
+  }
+
+  // String, number, boolean - treat as valid if present
+  return true;
+}
+
+/**
+ * Validate response from a fetch call
+ * Returns data if valid, null if response is ok but data is empty
+ */
+export async function validateFetchResponse<T>(
+  response: Response
+): Promise<T | null> {
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+  }
+
+  const data = await response.json() as T;
+
+  // Check if response has actual data
+  if (!isValidData(data)) {
+    console.warn('Response received but contained no meaningful data');
+    return null;
+  }
+
+  return data;
 }
