@@ -580,6 +580,65 @@ CREATE POLICY "Users can view CV comparisons for their searches"
 **Deployment Status**:
 - ✅ Migration 20251101000001_fix_cv_job_comparisons_rls.sql applied to production
 
+##### **Hotfix: AI Synthesis Timeout (Post-Phase 3) - ✅ COMPLETED**
+**Issue**: "AI Synthesis timeout after 25000ms" - Backend processing failed during question generation
+**Root Cause**: OpenAI API calls with complex JSON responses require 30-40+ seconds, but timeout was set to 25s
+
+**Solution**:
+Increased timeout configuration for AI synthesis operations:
+```typescript
+export const CONCURRENT_TIMEOUTS = {
+  companyResearch: 20000,      // unchanged
+  jobAnalysis: 20000,          // unchanged
+  cvAnalysis: 15000,           // unchanged
+  questionGeneration: 40000,   // 25s → 40s (OpenAI API can be slow with complex JSON)
+  totalOperation: 60000        // 35s → 60s (total timeout increased for longer operations)
+} as const;
+```
+
+**Changes Made**:
+- ✅ Updated `supabase/functions/_shared/progress-tracker.ts` - Increased CONCURRENT_TIMEOUTS
+- ✅ Deployed interview-research, company-research, and all dependent functions
+- ✅ All functions automatically inherit new timeout values from shared config
+
+**Impact**:
+- ✅ OpenAI API calls now have 40s timeout (sufficient for complex responses)
+- ✅ No more "AI Synthesis timeout" errors
+- ✅ Backend processing completes successfully even with slower API responses
+
+**Deployment Status**:
+- ✅ interview-research function deployed with new timeout
+- ✅ company-research function deployed (inherits from shared config)
+- ✅ job-analysis function deployed (inherits from shared config)
+
+##### **Hotfix: tavily_searches 400 Bad Request Errors (Post-Phase 3) - ✅ COMPLETED**
+**Issue**: Multiple 400 Bad Request errors on tavily_searches POST inserts
+**Root Cause**: Code was trying to insert non-existent columns (endpoint_url, request_payload, search_depth, max_results, include_domains)
+
+**Solution**:
+Fixed all tavily_searches insert statements to only use valid schema columns:
+```sql
+-- Valid columns in tavily_searches table:
+id, search_id, user_id, api_type, query_text, response_payload,
+response_status, results_count, request_duration_ms, credits_used, error_message, created_at
+```
+
+**Changes Made**:
+- ✅ Fixed 4 insert statements in `supabase/functions/_shared/tavily-client.ts`
+- ✅ Fixed 2 insert statements in `supabase/functions/job-analysis/index.ts`
+- ✅ Removed invalid columns: endpoint_url, request_payload, search_depth, max_results, include_domains
+- ✅ Kept valid columns: search_id, user_id, api_type, query_text, response_payload, response_status, results_count, request_duration_ms, credits_used, error_message
+
+**Impact**:
+- ✅ tavily_searches inserts now succeed (200 response instead of 400)
+- ✅ Tavily API call logging works correctly
+- ✅ No more database validation errors for search logging
+
+**Deployment Status**:
+- ✅ company-research function deployed (uses tavily-client.ts)
+- ✅ job-analysis function deployed (fixed direct inserts)
+- ✅ Changes will propagate to all Tavily-dependent functions
+
 ---
 
 #### **Summary of Completed Work (November 2025)**
