@@ -74,6 +74,9 @@ npm run lint         # Run ESLint
 # Generate types from remote database
 npx supabase gen types typescript --project-id xjjjvefsrkcszhuwtoss > src/types/supabase.ts
 
+# Pull current schema snapshot (ALWAYS do this after any database changes)
+npx supabase db pull --project-id xjjjvefsrkcszhuwtoss > supabase/schema.sql
+
 # Local development (if needed)
 npx supabase start   # Start local Supabase
 npx supabase stop    # Stop local Supabase
@@ -86,6 +89,23 @@ npm run functions:serve                     # Local function development with .e
 npm run db:push                             # Push local schema changes to remote
 npm run db:pull                             # Pull remote schema to local
 ```
+
+**IMPORTANT: Schema Management Workflow**
+
+After ANY database operation:
+1. Creating migrations
+2. Applying migrations to remote
+3. Creating/modifying tables, functions, or RLS policies
+4. Deploying Edge Functions that use new schema
+
+**Always run:**
+```bash
+npx supabase db pull --project-id xjjjvefsrkcszhuwtoss > supabase/schema.sql
+git add supabase/schema.sql
+git commit -m "Update schema snapshot after [change description]"
+```
+
+This keeps `supabase/schema.sql` as a single source of truth for understanding the current database state, complementing the migration history for understanding how we got here.
 
 ## Configuration Files
 
@@ -117,17 +137,24 @@ npm run db:pull                             # Pull remote schema to local
 
 ## Database Schema (Optimized & Simplified)
 
-### Core Tables  
+### Understanding the Database
+
+**For a quick reference of the current schema, see: `supabase/schema.sql`**
+
+This file is automatically updated after ANY database changes. It provides a single source of truth for understanding the current database state, complementing the migration history in `supabase/migrations/` which shows how the schema evolved.
+
+### Core Tables
 - **`searches`**: User search sessions and status tracking
-- **`interview_stages`**: AI-generated interview stage structures  
+- **`interview_stages`**: AI-generated interview stage structures
 - **`interview_questions`**: **Enhanced** questions with comprehensive metadata and guidance
 - **`cv_job_comparisons`**: Resume-job matching analysis
 - **`scraped_urls`**: Consolidated URL storage with embedded content (optimized)
 - **`tavily_searches`**: Simplified API call logging
 - **`resumes`**: User resume/CV storage
-- **`profiles`**: User profile information
+- **`profiles`**: User profile information with seniority level
 - **`practice_sessions`**: Practice interview sessions
 - **`practice_answers`**: User practice responses
+- **`user_question_flags`**: User question personalization (favorites, needs_work, skipped)
 
 ### Key Features
 - **Research-Driven Question Generation**: 120-150 questions per search with research-first approach
@@ -239,12 +266,41 @@ The question generation system has been significantly enhanced to provide compre
 4. **Comprehensive logging** for debugging
 5. **Environment-specific configuration**
 
-### Making Changes
-1. Update database schema via migrations
-2. Regenerate TypeScript types
-3. Update Edge Functions as needed
-4. Test locally before deploying
-5. Deploy functions to remote environment
+### Making Changes to the Database
+
+**Complete workflow for any database changes:**
+
+1. **Create migration** (if adding schema changes):
+   ```bash
+   npx supabase migrations new add_feature_description
+   # Edit: supabase/migrations/[timestamp]_add_feature_description.sql
+   ```
+
+2. **Update local schema and test**:
+   ```bash
+   npx supabase db push          # Apply to remote
+   ```
+
+3. **Regenerate TypeScript types**:
+   ```bash
+   npx supabase gen types typescript --project-id xjjjvefsrkcszhuwtoss > src/types/supabase.ts
+   ```
+
+4. **Pull and commit schema snapshot** (CRITICAL):
+   ```bash
+   npx supabase db pull --linked > supabase/schema.sql
+   git add supabase/schema.sql supabase/migrations/[your_migration].sql src/types/supabase.ts
+   git commit -m "Add [feature]: Update schema and types"
+   ```
+
+5. **Update Edge Functions** if needed to use new schema
+
+6. **Deploy functions to remote**:
+   ```bash
+   npm run functions:deploy
+   ```
+
+**Key principle:** Always update `supabase/schema.sql` after database changes so developers have a clear reference of the current state.
 
 ## Key Architectural Patterns
 
