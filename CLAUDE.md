@@ -139,9 +139,12 @@ This keeps `supabase/schema.sql` as a single source of truth for understanding t
 
 ### Understanding the Database
 
-**For a quick reference of the current schema, see: `supabase/schema.sql`**
+**Quick references:**
+- **Current schema:** `supabase/schema.sql` - Updated after every database change
+- **Schema analysis:** `docs/DATABASE_ANALYSIS.md` - MVP assessment, issues, and recommendations
+- **Evolution history:** `supabase/migrations/` - How the schema got to current state
 
-This file is automatically updated after ANY database changes. It provides a single source of truth for understanding the current database state, complementing the migration history in `supabase/migrations/` which shows how the schema evolved.
+The snapshot in `schema.sql` provides a single source of truth for understanding the current database state, complementing the migration history which shows how the schema evolved.
 
 ### Core Tables
 - **`searches`**: User search sessions and status tracking
@@ -258,6 +261,13 @@ The question generation system has been significantly enhanced to provide compre
 - **Graceful degradation** for AI service failures
 
 ## Development Workflow
+
+### Documentation Principles
+1. **Simplicity over completeness** - Avoid over-engineering documentation
+2. **Centralize documentation** - Use `docs/` folder, not scattered files
+3. **Update existing files first** - Extend README.md or docs files before creating new ones
+4. **Link from CLAUDE.md** - This file is the navigation hub for developers
+5. **Keep it readable** - Short, clear files beat long technical manuals
 
 ### Best Practices
 1. **Remote-first development** recommended
