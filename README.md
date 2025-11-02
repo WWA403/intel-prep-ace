@@ -508,17 +508,17 @@ Per-Search Override:
 
 ### 📊 Priority Matrix
 
-| Epic | Priority | Effort | User Impact | Business Value |
-|------|----------|--------|-------------|----------------|
-| ~~**1.1 Seniority Personalization**~~ | ✅ Complete | Medium | High | High |
-| ~~**1.2 Question Sampler**~~ | ✅ Complete | Medium | Very High | Very High |
-| ~~**1.3 Favorite/Flag**~~ | ✅ Complete | Low | High | Medium |
-| **2.2 Audio STT** | 🟡 High | High | Very High | High |
-| **2.1 Swipe Gestures** | 🟡 High | Low | Medium | Low |
-| **2.4 Session Summary** | 🟡 High | Low | Medium | Medium |
-| **2.3 Timer Presets** | 🟢 Medium | Low | Low | Low |
-| **3.1 Analytics Dashboard** | 🟢 Medium | Medium | Medium | Medium |
-| **3.2 Performance** | 🟡 High | Medium | High | High |
+| Epic                                  | Priority   | Effort | User Impact | Business Value |
+| ------------------------------------- | ---------- | ------ | ----------- | -------------- |
+| ~~**1.1 Seniority Personalization**~~ | ✅ Complete | Medium | High        | High           |
+| ~~**1.2 Question Sampler**~~          | ✅ Complete | Medium | Very High   | Very High      |
+| ~~**1.3 Favorite/Flag**~~             | ✅ Complete | Low    | High        | Medium         |
+| **2.2 Audio STT**                     | 🟡 High     | High   | Very High   | High           |
+| **2.1 Swipe Gestures**                | 🟡 High     | Low    | Medium      | Low            |
+| **2.4 Session Summary**               | 🟡 High     | Low    | Medium      | Medium         |
+| **2.3 Timer Presets**                 | 🟢 Medium   | Low    | Low         | Low            |
+| **3.1 Analytics Dashboard**           | 🟢 Medium   | Medium | Medium      | Medium         |
+| **3.2 Performance**                   | 🟡 High     | Medium | High        | High           |
 
 ---
 
