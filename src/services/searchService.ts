@@ -181,15 +181,19 @@ export const searchService = {
         .eq("search_id", searchId)
         .single();
 
-      if (cvJobError && cvJobError.code !== 'PGRST116') { // PGRST116 is "not found"
-        console.warn("CV-Job comparison not found:", cvJobError);
+      // Handle missing CV-Job comparison data gracefully
+      // PGRST116 = not found (record doesn't exist)
+      // PostgREST returns 406 when no rows match RLS (instead of empty result)
+      if (cvJobError && cvJobError.code !== 'PGRST116') {
+        // Only log if it's not a "no data" situation
+        console.warn("CV-Job comparison query error:", cvJobError.message || cvJobError);
       }
 
-      return { 
-        search, 
-        stages: stagesWithQuestions, 
+      return {
+        search,
+        stages: stagesWithQuestions,
         cvJobComparison: cvJobComparison || null,
-        success: true 
+        success: true
       };
     } catch (error) {
       console.error("Error getting search results:", error);
