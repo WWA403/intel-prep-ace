@@ -303,11 +303,11 @@ Per-Search Override:
 - **Question Quality**: Has confidence scoring, no user rating
 - **Progress Analytics**: No dashboard (planned)
 
-#### 🔴 **Critical Gaps** (8%)
+#### 🔴 **Critical Gaps** (5%)
 1. ~~**Seniority-Based Personalization**~~ ✅ **COMPLETED** (Epic 1.1)
 2. ~~**Question Session Sampler**~~ ✅ **COMPLETED** (Epic 1.2)
 3. ~~**Favorite/Flag Questions**~~ ✅ **COMPLETED** (Epic 1.3)
-4. **Swipe/Gesture Interface** - Traditional buttons only, no gestures
+4. ~~**Swipe/Gesture Interface**~~ ✅ **COMPLETED** (Epic 2.1)
 5. **Audio STT (Speech-to-Text)** - Voice records but doesn't transcribe
 6. **AI Answer Feedback** - Not implemented (out of MVP scope per PRD)
 
@@ -404,17 +404,30 @@ Per-Search Override:
 #### **PHASE 2: Enhanced UX** (2 weeks)
 
 <details>
-<summary><b>Epic 2.1: Swipe Gesture Interface</b> ⏱️ 3 days</summary>
+<summary><b>✅ Epic 2.1: Swipe Gesture Interface</b> ✅ COMPLETED (Nov 2, 2025)</summary>
+
+**User Story**: As a user, I want to use swipe gestures to navigate and interact with practice questions.
 
 **Tasks**:
-- [ ] Install `react-swipeable` or `framer-motion`
-- [ ] Implement swipe handlers (left=skip, right=favorite, up=guidance)
-- [ ] Add visual swipe indicators
-- [ ] Test on iOS/Android mobile devices
+- [x] Install `react-swipeable` or `framer-motion`
+- [x] Implement swipe handlers (left=skip, right=favorite, up=guidance)
+- [x] Add visual swipe indicators
+- [x] Test on iOS/Android mobile devices
 
-**Files to Change**:
-- `src/pages/Practice.tsx` - Add swipe logic
-- `package.json` - Add swipe library
+**Implementation Details**:
+- ✅ Installed `react-swipeable` library (lightweight, simple)
+- ✅ Swipe left: Skip to next question
+- ✅ Swipe right: Toggle favorite flag
+- ✅ Swipe up: Toggle detailed guidance display (answer approach, evaluation criteria, follow-up questions)
+- ✅ Visual feedback: Color-coded overlay with icons during swipe
+- ✅ Swipe hints: Subtle indicators showing available gestures
+- ✅ Works on both touch (mobile) and mouse drag (desktop)
+- ✅ Smooth animations and transitions
+- ✅ Prevents scroll interference during swipes
+
+**Files Changed**:
+- `package.json` - Added `react-swipeable` dependency
+- `src/pages/Practice.tsx` - Added swipe handlers, visual feedback, and guidance toggle
 </details>
 
 <details>
@@ -513,8 +526,8 @@ Per-Search Override:
 | ~~**1.1 Seniority Personalization**~~ | ✅ Complete | Medium | High | High |
 | ~~**1.2 Question Sampler**~~ | ✅ Complete | Medium | Very High | Very High |
 | ~~**1.3 Favorite/Flag**~~ | ✅ Complete | Low | High | Medium |
+| ~~**2.1 Swipe Gestures**~~ | ✅ Complete | Low | Medium | Low |
 | **2.2 Audio STT** | 🟡 High | High | Very High | High |
-| **2.1 Swipe Gestures** | 🟡 High | Low | Medium | Low |
 | **2.4 Session Summary** | 🟡 High | Low | Medium | Medium |
 | **2.3 Timer Presets** | 🟢 Medium | Low | Low | Low |
 | **3.1 Analytics Dashboard** | 🟢 Medium | Medium | Medium | Medium |
@@ -530,8 +543,8 @@ Per-Search Override:
 - ✅ Epic 1.3: Favorite/Flag Questions (3 days) - **COMPLETED Oct 25, 2025**
 
 #### **Sprint 2** (Week 3-4): Enhanced UX
+- ✅ Epic 2.1: Swipe Gestures (3 days) - **COMPLETED Nov 2, 2025**
 - ✅ Epic 2.2: Audio STT (5 days)
-- ✅ Epic 2.1: Swipe Gestures (3 days)
 - ✅ Epic 2.4: Session Summary (3 days)
 
 #### **Sprint 3** (Week 5): Polish

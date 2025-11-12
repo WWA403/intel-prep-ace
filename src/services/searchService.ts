@@ -470,4 +470,26 @@ export const searchService = {
       return { error, success: false };
     }
   },
+
+  // Epic 2.4: Complete practice session and save notes
+  async completePracticeSession(sessionId: string, sessionNotes?: string) {
+    try {
+      const { data, error } = await supabase
+        .from("practice_sessions")
+        .update({
+          completed_at: new Date().toISOString(),
+          session_notes: sessionNotes || null,
+        })
+        .eq("id", sessionId)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      return { session: data, success: true };
+    } catch (error) {
+      console.error("Error completing practice session:", error);
+      return { error, success: false };
+    }
+  },
 };

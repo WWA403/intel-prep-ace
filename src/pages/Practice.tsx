@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { useSwipeable } from "react-swipeable";
 import Navigation from "@/components/Navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -27,11 +28,15 @@ import {
   Square,
   Filter,
   Shuffle,
-  Star
+  Star,
+  ArrowUp,
+  ArrowLeft,
+  ArrowRight
 } from "lucide-react";
 import { searchService } from "@/services/searchService";
 import { sessionSampler } from "@/services/sessionSampler";
 import { useAuth } from "@/hooks/useAuth";
+import { SessionSummary } from "@/components/SessionSummary";
 
 interface EnhancedQuestion {
   question: string;
@@ -89,6 +94,7 @@ interface PracticeSession {
   search_id: string;
   started_at: string;
   completed_at?: string;
+  session_notes?: string | null;
 }
 
 const Practice = () => {
@@ -108,6 +114,7 @@ const Practice = () => {
   const [timerTick, setTimerTick] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSavingNotes, setIsSavingNotes] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [practiceSession, setPracticeSession] = useState<PracticeSession | null>(null);
   const [savedAnswers, setSavedAnswers] = useState<Map<string, boolean>>(new Map());
@@ -141,6 +148,11 @@ const Practice = () => {
   const [hasRecording, setHasRecording] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Swipe gesture states
+  const [swipeDirection, setSwipeDirection] = useState<'left' | 'right' | 'up' | null>(null);
+  const [swipeDelta, setSwipeDelta] = useState(0);
+  const [showGuidance, setShowGuidance] = useState(false);
 
   const questionCategories = [
     { value: 'all', label: 'All Categories' },
@@ -570,7 +582,11 @@ const Practice = () => {
         
         // Check if this is the last question
         if (currentIndex >= questions.length - 1) {
-          // Mark session as completed
+          // Mark session as completed in database
+          if (practiceSession) {
+            await searchService.completePracticeSession(practiceSession.id);
+          }
+          // Mark session as completed in UI
           setSessionState('completed');
         } else {
           // Auto-advance to next question
@@ -628,6 +644,73 @@ const Practice = () => {
   const answeredCount = questions.filter(q => q.answered).length;
   const selectedStagesCount = allStages.filter(stage => stage.selected).length;
   const currentQuestionTime = getCurrentQuestionTime();
+
+  // Swipe handlers
+  const handleSwipeLeft = () => {
+    if (currentIndex < questions.length - 1) {
+      skipQuestion();
+    }
+  };
+
+  const handleSwipeRight = () => {
+    if (currentQuestion) {
+      handleToggleFlag(currentQuestion.id, 'favorite');
+    }
+  };
+
+  const handleSwipeUp = () => {
+    setShowGuidance(!showGuidance);
+  };
+
+  // Reset swipe state when question changes
+  useEffect(() => {
+    setSwipeDirection(null);
+    setSwipeDelta(0);
+    setShowGuidance(false);
+  }, [currentIndex]);
+
+  // Swipe configuration
+  const swipeHandlers = useSwipeable({
+    onSwiping: (eventData) => {
+      const { dir, deltaX, deltaY } = eventData;
+      // Only track horizontal swipes for left/right, vertical for up
+      if (Math.abs(deltaX) > Math.abs(deltaY)) {
+        if (dir === 'Left' || dir === 'Right') {
+          setSwipeDirection(dir.toLowerCase() as 'left' | 'right');
+          setSwipeDelta(deltaX);
+        }
+      } else if (dir === 'Up' && deltaY < -50) {
+        setSwipeDirection('up');
+        setSwipeDelta(deltaY);
+      }
+    },
+    onSwipedLeft: () => {
+      setSwipeDirection(null);
+      setSwipeDelta(0);
+      handleSwipeLeft();
+    },
+    onSwipedRight: () => {
+      setSwipeDirection(null);
+      setSwipeDelta(0);
+      handleSwipeRight();
+    },
+    onSwipedUp: () => {
+      setSwipeDirection(null);
+      setSwipeDelta(0);
+      handleSwipeUp();
+    },
+    onSwiped: () => {
+      // Reset after any swipe completes
+      setTimeout(() => {
+        setSwipeDirection(null);
+        setSwipeDelta(0);
+      }, 200);
+    },
+    trackMouse: true, // Enable mouse drag for desktop
+    trackTouch: true, // Enable touch for mobile
+    preventScrollOnSwipe: true,
+    delta: 50, // Minimum distance for swipe
+  });
 
   // Update timer display every second
   useEffect(() => {
@@ -1035,70 +1118,41 @@ const Practice = () => {
   if (sessionState === 'completed') {
     const totalTime = Array.from(questionTimers.values()).reduce((sum, time) => sum + time, 0);
     const avgTime = answeredCount > 0 ? Math.floor(totalTime / answeredCount) : 0;
+    const skippedCount = questions.length - answeredCount;
+    const favoritedCount = questions.filter(q => questionFlags[q.id]?.flag_type === 'favorite').length;
+
+    const handleSaveNotes = async (notes: string) => {
+      if (!practiceSession) return;
+      
+      setIsSavingNotes(true);
+      try {
+        const result = await searchService.completePracticeSession(practiceSession.id, notes);
+        if (!result.success) {
+          console.error("Failed to save session notes:", result.error);
+        }
+      } catch (error) {
+        console.error("Error saving session notes:", error);
+      } finally {
+        setIsSavingNotes(false);
+      }
+    };
 
     return (
       <div className="min-h-screen bg-background">
         <Navigation />
         <div className="container mx-auto px-4 py-8 max-w-2xl">
-          <Card className="text-center">
-            <CardHeader>
-              <div className="flex justify-center mb-4">
-                <div className="rounded-full bg-green-100 p-4">
-                  <CheckCircle className="h-12 w-12 text-green-600" />
-                </div>
-              </div>
-              <CardTitle className="text-2xl">Practice Session Complete!</CardTitle>
-              <CardDescription>
-                Great job! You've completed your practice session.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {/* Session Statistics */}
-              <div className="grid grid-cols-3 gap-4 py-6">
-                <div className="space-y-1">
-                  <div className="text-3xl font-bold text-primary">{answeredCount}</div>
-                  <div className="text-xs text-muted-foreground">Questions Answered</div>
-                </div>
-                <div className="space-y-1">
-                  <div className="text-3xl font-bold text-primary">{formatTime(totalTime)}</div>
-                  <div className="text-xs text-muted-foreground">Total Time</div>
-                </div>
-                <div className="space-y-1">
-                  <div className="text-3xl font-bold text-primary">{formatTime(avgTime)}</div>
-                  <div className="text-xs text-muted-foreground">Avg. Per Question</div>
-                </div>
-              </div>
-
-              {/* Progress Bar */}
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Completion</span>
-                  <span className="font-medium">{answeredCount}/{questions.length}</span>
-                </div>
-                <Progress value={(answeredCount / questions.length) * 100} className="h-2" />
-              </div>
-
-              {/* Action Buttons */}
-              <div className="space-y-3 pt-4">
-                <Button
-                  onClick={handleStartNewSession}
-                  size="lg"
-                  className="w-full"
-                >
-                  <Shuffle className="h-4 w-4 mr-2" />
-                  Start New Practice Session
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => navigate(`/dashboard?searchId=${searchId}`)}
-                  className="w-full"
-                >
-                  <ChevronLeft className="h-4 w-4 mr-2" />
-                  Back to Dashboard
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+          <SessionSummary
+            answeredCount={answeredCount}
+            totalQuestions={questions.length}
+            skippedCount={skippedCount}
+            favoritedCount={favoritedCount}
+            totalTime={totalTime}
+            avgTime={avgTime}
+            onSaveNotes={handleSaveNotes}
+            onStartNewSession={handleStartNewSession}
+            onBackToDashboard={() => navigate(`/dashboard?searchId=${searchId}`)}
+            isSaving={isSavingNotes}
+          />
         </div>
       </div>
     );
@@ -1139,8 +1193,72 @@ const Practice = () => {
         </div>
 
         {/* Main Question Card - Mobile Optimized */}
-        <div className="max-w-2xl mx-auto">
-          <Card className="overflow-hidden">
+        <div className="max-w-2xl mx-auto relative">
+          {/* Swipe Indicator Overlay */}
+          {swipeDirection && (
+            <div 
+              className={`absolute inset-0 z-10 flex items-center justify-center pointer-events-none transition-opacity duration-200 ${
+                swipeDirection === 'left' ? 'bg-red-500/20' :
+                swipeDirection === 'right' ? 'bg-amber-500/20' :
+                'bg-blue-500/20'
+              }`}
+              style={{
+                opacity: Math.min(Math.abs(swipeDelta) / 100, 0.8),
+                transform: swipeDirection === 'left' ? `translateX(${Math.min(swipeDelta, 0)}px)` :
+                           swipeDirection === 'right' ? `translateX(${Math.max(swipeDelta, 0)}px)` :
+                           `translateY(${Math.min(swipeDelta, 0)}px)`
+              }}
+            >
+              <div className="flex flex-col items-center gap-2 text-lg font-semibold">
+                {swipeDirection === 'left' && (
+                  <>
+                    <ArrowLeft className="h-8 w-8 text-red-600" />
+                    <span className="text-red-600">Skip</span>
+                  </>
+                )}
+                {swipeDirection === 'right' && (
+                  <>
+                    <Star className="h-8 w-8 text-amber-600 fill-current" />
+                    <span className="text-amber-600">Favorite</span>
+                  </>
+                )}
+                {swipeDirection === 'up' && (
+                  <>
+                    <ArrowUp className="h-8 w-8 text-blue-600" />
+                    <span className="text-blue-600">Guidance</span>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Swipe Hint (only show on first question or when no swipe has happened) */}
+          {sessionState === 'inProgress' && !swipeDirection && swipeDelta === 0 && (
+            <div className="absolute -top-8 left-0 right-0 flex items-center justify-center gap-4 text-xs text-muted-foreground pointer-events-none">
+              <div className="flex items-center gap-1">
+                <ArrowLeft className="h-3 w-3" />
+                <span>Skip</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <Star className="h-3 w-3" />
+                <span>Favorite</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <ArrowUp className="h-3 w-3" />
+                <span>Guidance</span>
+              </div>
+            </div>
+          )}
+
+          <Card 
+            className={`overflow-hidden transition-transform duration-200 ${
+              swipeDirection === 'left' ? 'transform -translate-x-2' :
+              swipeDirection === 'right' ? 'transform translate-x-2' :
+              swipeDirection === 'up' ? 'transform -translate-y-2' :
+              ''
+            }`}
+            {...swipeHandlers}
+          >
             <CardHeader className="pb-4">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
@@ -1196,8 +1314,8 @@ const Practice = () => {
                 </Button>
               </div>
               
-              {/* Enhanced Question Information */}
-              {(currentQuestion.rationale || currentQuestion.company_context) && (
+              {/* Enhanced Question Information - Always show basic, toggle detailed with swipe up */}
+              {(currentQuestion.rationale || currentQuestion.company_context || currentQuestion.suggested_answer_approach || currentQuestion.evaluation_criteria || currentQuestion.follow_up_questions) && (
                 <div className="space-y-3 text-sm">
                   {currentQuestion.rationale && (
                     <div className="bg-blue-50 p-3 rounded-lg border-l-4 border-blue-200">
@@ -1213,39 +1331,44 @@ const Practice = () => {
                     </div>
                   )}
                   
-                  {currentQuestion.suggested_answer_approach && (
-                    <div className="bg-green-50 p-3 rounded-lg border-l-4 border-green-200">
-                      <h4 className="font-medium text-green-900 mb-1">Answer Approach</h4>
-                      <p className="text-green-800">{currentQuestion.suggested_answer_approach}</p>
-                    </div>
-                  )}
-                  
-                  {currentQuestion.evaluation_criteria && currentQuestion.evaluation_criteria.length > 0 && (
-                    <div className="bg-amber-50 p-3 rounded-lg border-l-4 border-amber-200">
-                      <h4 className="font-medium text-amber-900 mb-1">What interviewers look for:</h4>
-                      <ul className="text-amber-800 space-y-1">
-                        {currentQuestion.evaluation_criteria.map((criterion, index) => (
-                          <li key={index} className="flex items-start gap-2">
-                            <span className="text-amber-600 mt-1">•</span>
-                            {criterion}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  
-                  {currentQuestion.follow_up_questions && currentQuestion.follow_up_questions.length > 0 && (
-                    <div className="bg-gray-50 p-3 rounded-lg border-l-4 border-gray-200">
-                      <h4 className="font-medium text-gray-900 mb-1">Potential follow-up questions:</h4>
-                      <ul className="text-gray-800 space-y-1">
-                        {currentQuestion.follow_up_questions.map((followUp, index) => (
-                          <li key={index} className="flex items-start gap-2">
-                            <span className="text-gray-600 mt-1">•</span>
-                            {followUp}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
+                  {/* Detailed guidance - toggle with swipe up */}
+                  {showGuidance && (
+                    <>
+                      {currentQuestion.suggested_answer_approach && (
+                        <div className="bg-green-50 p-3 rounded-lg border-l-4 border-green-200">
+                          <h4 className="font-medium text-green-900 mb-1">Answer Approach</h4>
+                          <p className="text-green-800">{currentQuestion.suggested_answer_approach}</p>
+                        </div>
+                      )}
+                      
+                      {currentQuestion.evaluation_criteria && currentQuestion.evaluation_criteria.length > 0 && (
+                        <div className="bg-amber-50 p-3 rounded-lg border-l-4 border-amber-200">
+                          <h4 className="font-medium text-amber-900 mb-1">What interviewers look for:</h4>
+                          <ul className="text-amber-800 space-y-1">
+                            {currentQuestion.evaluation_criteria.map((criterion, index) => (
+                              <li key={index} className="flex items-start gap-2">
+                                <span className="text-amber-600 mt-1">•</span>
+                                {criterion}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      
+                      {currentQuestion.follow_up_questions && currentQuestion.follow_up_questions.length > 0 && (
+                        <div className="bg-gray-50 p-3 rounded-lg border-l-4 border-gray-200">
+                          <h4 className="font-medium text-gray-900 mb-1">Potential follow-up questions:</h4>
+                          <ul className="text-gray-800 space-y-1">
+                            {currentQuestion.follow_up_questions.map((followUp, index) => (
+                              <li key={index} className="flex items-start gap-2">
+                                <span className="text-gray-600 mt-1">•</span>
+                                {followUp}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               )}
