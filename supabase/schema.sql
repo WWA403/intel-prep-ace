@@ -662,4 +662,3 @@ COMMENT ON COLUMN public.scraped_urls.processing_status IS 'Current processing s
 COMMENT ON FUNCTION public.update_search_progress IS 'Updates search progress for async job processing. Used by Edge Functions to provide real-time status updates.';
 COMMENT ON FUNCTION public.get_search_progress IS 'Returns current progress for a specific search, including a stall detection flag. Frontend polls this to get real-time status updates.';
 COMMENT ON VIEW public.stalled_searches IS 'Identifies searches that have been processing for >30s without updates. Useful for detecting jobs that may have crashed or hung.';
-
