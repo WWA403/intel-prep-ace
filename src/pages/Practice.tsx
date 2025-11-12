@@ -28,14 +28,10 @@ import {
   Square,
   Filter,
   Shuffle,
-<<<<<<< HEAD
-  Star
-=======
   Star,
   ArrowUp,
   ArrowLeft,
   ArrowRight
->>>>>>> dev-q
 } from "lucide-react";
 import { searchService } from "@/services/searchService";
 import { sessionSampler } from "@/services/sessionSampler";
