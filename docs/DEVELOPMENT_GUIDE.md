@@ -1,6 +1,6 @@
-# Development Guide: INT - Interview Prep Tool
+# Development Guide: Hireo - Interview Prep Tool
 
-This guide provides practical patterns, conventions, and workflows for developing and maintaining the INT application.
+This guide provides practical patterns, conventions, and workflows for developing and maintaining the Hireo application.
 
 ## Table of Contents
 1. [Getting Started](#getting-started)
@@ -28,7 +28,7 @@ npm install
 npm run dev
 
 # Access the application
-open http://localhost:8080
+open http://localhost:5173
 ```
 
 ### Environment Variables

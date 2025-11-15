@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-This roadmap addresses two critical issues affecting the INT Interview Prep Tool:
+This roadmap addresses two critical issues affecting Hireo:
 
 1. **URL Deduplication System** - Currently disabled due to timeout issues, causing 40%+ increase in API costs
 2. **Interview Experience Research** - Limited real candidate experience extraction affecting research quality

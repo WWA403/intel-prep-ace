@@ -1,4 +1,4 @@
-# Technical Design Document: INT - Interview Prep Tool
+# Technical Design Document: Hireo - Interview Prep Tool
 
 ## Table of Contents
 1. [System Architecture Overview](#1-system-architecture-overview)
