@@ -991,25 +991,41 @@ async function processResearchAsync(
     // CHECKPOINT 1: Save interview stages immediately after synthesis
     console.log("💾 CHECKPOINT 1: Saving interview stages and questions...");
 
-    // Step 5: Store interview stages and questions in database
+    // Helper: Execute database operation with timeout protection (30 seconds)
+    const withDbTimeout = async (operation: () => Promise<any>, label: string) => {
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error(`Database operation timeout: ${label}`)), 30000)
+      );
+      try {
+        return await Promise.race([operation(), timeoutPromise]);
+      } catch (error) {
+        console.error(`❌ Database operation failed: ${label}`, error);
+        throw error;
+      }
+    };
+
+    // Step 5: Store interview stages and questions in database (with timeout protection)
     for (const stage of synthesisResult.interview_stages) {
-      // Insert stage
-      const { data: stageData, error: stageError } = await supabase
-        .from("interview_stages")
-        .insert({
-          search_id: searchId,
-          name: stage.name,
-          duration: stage.duration,
-          interviewer: stage.interviewer,
-          content: stage.content,
-          guidance: `${stage.guidance}\n\nPreparation Tips:\n${stage.preparation_tips.join('\n')}\n\nRed Flags to Avoid:\n${stage.red_flags_to_avoid.join('\n')}`,
-          order_index: stage.order_index
-        })
-        .select()
-        .single();
-      
+      // Insert stage with timeout
+      const { data: stageData, error: stageError } = await withDbTimeout(
+        () => supabase
+          .from("interview_stages")
+          .insert({
+            search_id: searchId,
+            name: stage.name,
+            duration: stage.duration,
+            interviewer: stage.interviewer,
+            content: stage.content,
+            guidance: `${stage.guidance}\n\nPreparation Tips:\n${stage.preparation_tips.join('\n')}\n\nRed Flags to Avoid:\n${stage.red_flags_to_avoid.join('\n')}`,
+            order_index: stage.order_index
+          })
+          .select()
+          .single(),
+        `Insert stage: ${stage.name}`
+      );
+
       if (stageError) throw stageError;
-      
+
       // Insert enhanced questions for this stage with dynamic categorization
       const questionsToInsert = stage.common_questions.map((question, index) => ({
         stage_id: stageData.id,
@@ -1026,56 +1042,62 @@ async function processResearchAsync(
         company_context: generateCompanyContext(question, company, role, companyInsights),
         confidence_score: calculateStageQuestionConfidence(question, companyInsights, stage.name)
       }));
-      
-      const { error: questionsError } = await supabase
-        .from("interview_questions")
-        .insert(questionsToInsert);
-      
+
+      const { error: questionsError } = await withDbTimeout(
+        () => supabase
+          .from("interview_questions")
+          .insert(questionsToInsert),
+        `Insert ${questionsToInsert.length} questions for stage: ${stage.name}`
+      );
+
       if (questionsError) throw questionsError;
     }
 
     // CHECKPOINT 2: Save CV analysis immediately
     console.log("💾 CHECKPOINT 2: Saving CV analysis...");
 
-    // Step 6: Save CV analysis if provided
+    // Step 6: Save CV analysis if provided (with timeout)
     if (cv && cvAnalysis) {
       try {
         console.log("Saving CV analysis to resumes table...");
         console.log("CV Analysis structure:", Object.keys(cvAnalysis));
-        
+
         const resumeData = {
           user_id: userId,
           search_id: searchId,
           content: cv,
           parsed_data: cvAnalysis.parsedData || cvAnalysis // Use parsedData if available, otherwise fallback to cvAnalysis
         };
-        
+
         console.log("Resume data to save:", {
           user_id: userId,
           search_id: searchId,
           content_length: cv.length,
           has_parsed_data: !!(cvAnalysis.parsedData || cvAnalysis)
         });
-        
-        const { data: resumeResult, error: resumeError } = await supabase
-          .from("resumes")
-          .insert(resumeData)
-          .select()
-          .single();
-          
+
+        const { data: resumeResult, error: resumeError } = await withDbTimeout(
+          () => supabase
+            .from("resumes")
+            .insert(resumeData)
+            .select()
+            .single(),
+          `Insert resume for user: ${userId}, search: ${searchId}`
+        );
+
         if (resumeError) {
           console.error("Error saving resume:", resumeError);
           throw resumeError;
         }
-        
+
         console.log("Successfully saved resume with ID:", resumeResult.id);
-        logger.log('CV_SAVED', 'DATABASE', { 
+        logger.log('CV_SAVED', 'DATABASE', {
           resumeId: resumeResult.id,
           userId,
           searchId,
           hasStructuredData: !!resumeResult.full_name
         });
-        
+
       } catch (error) {
         console.error("Failed to save CV analysis:", error);
         logger.log('CV_SAVE_ERROR', 'DATABASE', { error: error.message, userId, searchId });
@@ -1088,23 +1110,26 @@ async function processResearchAsync(
     // CHECKPOINT 3: Save enhanced analysis
     console.log("💾 CHECKPOINT 3: Saving enhanced analysis and comparisons...");
 
-    // Step 7: Store enhanced question bank and comparison data
+    // Step 7: Store enhanced question bank and comparison data (with timeout)
     if (cvJobComparison) {
       try {
-        const { data, error } = await supabase
-          .from("cv_job_comparisons")
-          .upsert({
-            search_id: searchId,
-            user_id: userId,
-            skill_gap_analysis: cvJobComparison.skill_gap_analysis,
-            experience_gap_analysis: cvJobComparison.experience_gap_analysis,
-            personalized_story_bank: cvJobComparison.personalized_story_bank,
-            interview_prep_strategy: cvJobComparison.interview_prep_strategy,
-            overall_fit_score: cvJobComparison.overall_fit_score,
-            preparation_priorities: cvJobComparison.preparation_priorities
-          }, {
-            onConflict: 'search_id'
-          });
+        const { data, error } = await withDbTimeout(
+          () => supabase
+            .from("cv_job_comparisons")
+            .upsert({
+              search_id: searchId,
+              user_id: userId,
+              skill_gap_analysis: cvJobComparison.skill_gap_analysis,
+              experience_gap_analysis: cvJobComparison.experience_gap_analysis,
+              personalized_story_bank: cvJobComparison.personalized_story_bank,
+              interview_prep_strategy: cvJobComparison.interview_prep_strategy,
+              overall_fit_score: cvJobComparison.overall_fit_score,
+              preparation_priorities: cvJobComparison.preparation_priorities
+            }, {
+              onConflict: 'search_id'
+            }),
+          `Upsert cv_job_comparisons for search: ${searchId}`
+        );
 
         if (error) {
           console.error("❌ CV Job Comparison upsert error:", {
@@ -1210,17 +1235,20 @@ async function processResearchAsync(
       }
     }
 
-    // Step 8: Update search status to completed
+    // Step 8: Update search status to completed (with timeout)
     try {
-      const { error: updateError } = await supabase
-        .from("searches")
-        .update({
-          search_status: "completed",
-          cv_job_comparison: cvJobComparison,
-          preparation_priorities: cvJobComparison?.preparation_priorities || [],
-          overall_fit_score: cvJobComparison?.overall_fit_score || 0
-        })
-        .eq("id", searchId);
+      const { error: updateError } = await withDbTimeout(
+        () => supabase
+          .from("searches")
+          .update({
+            search_status: "completed",
+            cv_job_comparison: cvJobComparison,
+            preparation_priorities: cvJobComparison?.preparation_priorities || [],
+            overall_fit_score: cvJobComparison?.overall_fit_score || 0
+          })
+          .eq("id", searchId),
+        `Update search status to completed for search: ${searchId}`
+      );
 
       if (updateError) {
         console.error("❌ Status update error:", {
