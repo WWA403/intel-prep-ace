@@ -174,28 +174,28 @@ export const searchService = {
         })
       );
 
-      // Get CV-Job comparison data
-      // NOTE: RLS policy checks user_id, so we must also filter by the authenticated user
-      // This prevents 406 errors from PostgREST policy evaluation
-      const { data: cvJobComparison, error: cvJobError } = await supabase
-        .from("cv_job_comparisons")
-        .select("*")
+      // Get comparison analysis from search_artifacts (consolidated after Option B redesign)
+      const { data: artifact, error: artifactError } = await supabase
+        .from("search_artifacts")
+        .select("comparison_analysis, preparation_guidance")
         .eq("search_id", searchId)
-        .eq("user_id", search.user_id)
         .single();
 
-      // Handle missing CV-Job comparison data gracefully
+      // Handle missing artifact data gracefully
       // PGRST116 = not found (record doesn't exist)
-      // PostgREST returns 406 when no rows match RLS (instead of empty result)
-      if (cvJobError && cvJobError.code !== 'PGRST116') {
-        // Only log if it's not a "no data" situation
-        console.warn("CV-Job comparison query error:", cvJobError.message || cvJobError);
+      if (artifactError && artifactError.code !== 'PGRST116') {
+        console.warn("Search artifacts query error:", artifactError.message || artifactError);
       }
+
+      // Extract comparison analysis and preparation guidance from artifact
+      const cvJobComparison = artifact?.comparison_analysis || null;
+      const preparationGuidance = artifact?.preparation_guidance || null;
 
       return {
         search,
         stages: stagesWithQuestions,
-        cvJobComparison: cvJobComparison || null,
+        cvJobComparison,
+        preparationGuidance,
         success: true
       };
     } catch (error) {
