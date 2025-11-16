@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.43.2";
+import { RESEARCH_CONFIG, getOpenAIModel, getMaxTokens, getTemperature } from "../_shared/config.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -147,6 +148,10 @@ async function generateCVJobComparison(
     comparisonContext += `Success Factors: ${companyInsights.hiring_manager_insights?.success_factors?.join(', ') || 'Not available'}\n\n`;
   }
 
+  const model = getOpenAIModel('cvJobComparison');
+  const maxTokens = getMaxTokens('cvJobComparison');
+  const temperature = getTemperature('comparison');
+
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -154,7 +159,7 @@ async function generateCVJobComparison(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'gpt-4o',
+      model,
       messages: [
         {
           role: 'system',
@@ -167,7 +172,7 @@ Focus on:
 4. Strategic interview preparation tailored to the company's preferences
 5. Competitive positioning and unique value proposition
 
-You MUST return ONLY valid JSON in this exact structure - no markdown, no additional text:
+Return ONLY valid JSON - no markdown code blocks, no text before or after the JSON:
 
 {
   "skill_gap_analysis": {
@@ -274,8 +279,8 @@ You MUST return ONLY valid JSON in this exact structure - no markdown, no additi
           content: `Analyze this CV against job requirements and company insights to create a comprehensive interview preparation strategy:\n\n${comparisonContext}`
         }
       ],
-      max_tokens: 4000,
-      temperature: 0.7,
+      max_tokens: maxTokens,
+      temperature,
     }),
   });
 
@@ -284,19 +289,30 @@ You MUST return ONLY valid JSON in this exact structure - no markdown, no additi
   }
 
   const data = await response.json();
-  const analysisResult = data.choices[0].message.content;
-  
+  let analysisResult = data.choices[0].message.content;
+
   try {
+    // Clean markdown code blocks if present (OpenAI sometimes wraps JSON in ```json ... ```)
+    analysisResult = analysisResult.trim();
+    if (analysisResult.startsWith('```json')) {
+      analysisResult = analysisResult.replace(/^```json\n/, '').replace(/\n```$/, '').trim();
+    } else if (analysisResult.startsWith('```')) {
+      analysisResult = analysisResult.replace(/^```\n/, '').replace(/\n```$/, '').trim();
+    }
+
     return JSON.parse(analysisResult);
   } catch (parseError) {
     console.error("Failed to parse CV-Job comparison JSON:", parseError);
+    console.error("Raw response (first 500 chars):", analysisResult.substring(0, 500));
     
-    // Return fallback structure
+    // Return fallback structure with proper object/array types
     return {
       skill_gap_analysis: {
         matching_skills: { technical: [], soft: [], certifications: [] },
         missing_skills: { technical: [], soft: [], certifications: [] },
-        transferable_skills: [],
+        transferable_skills: [
+          // Ensure proper structure for frontend: array of objects with skill, relevance, how_to_position
+        ],
         skill_match_percentage: { technical: 0, soft: 0, overall: 0 }
       },
       experience_gap_analysis: {

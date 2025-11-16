@@ -259,7 +259,11 @@ async function generateCVJobComparison(
 
   try {
     console.log("Calling cv-job-comparison function...");
-    
+
+    // Add timeout protection (using questionGeneration timeout as it's similar complexity)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), CONCURRENT_TIMEOUTS.questionGeneration);
+
     const response = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/cv-job-comparison`, {
       method: 'POST',
       headers: {
@@ -273,17 +277,24 @@ async function generateCVJobComparison(
         jobRequirements,
         companyInsights
       }),
+      signal: controller.signal
     });
+
+    clearTimeout(timeoutId);
 
     if (response.ok) {
       const result = await response.json();
       return result.comparison_result;
     }
-    
+
     console.warn("CV-Job comparison failed, continuing without data");
     return null;
   } catch (error) {
-    console.error("Error calling cv-job-comparison:", error);
+    if (error instanceof Error && error.name === 'AbortError') {
+      console.warn(`CV-Job comparison timed out after ${CONCURRENT_TIMEOUTS.questionGeneration}ms, continuing without data`);
+    } else {
+      console.error("Error calling cv-job-comparison:", error);
+    }
     return null;
   }
 }
