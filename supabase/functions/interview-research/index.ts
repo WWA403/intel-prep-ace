@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.43.2";
 import { SearchLogger } from "../_shared/logger.ts";
-import { RESEARCH_CONFIG } from "../_shared/config.ts";
+import { RESEARCH_CONFIG, getOpenAIModel, getMaxTokens, getTemperature } from "../_shared/config.ts";
 import { ProgressTracker, PROGRESS_STEPS, CONCURRENT_TIMEOUTS, executeWithTimeout, executeWithTimeoutSafe, isValidData, validateFetchResponse } from "../_shared/progress-tracker.ts";
 
 const corsHeaders = {
@@ -407,6 +407,8 @@ async function conductInterviewSynthesis(
     synthesisContext += `Key Achievements: ${analysisData.key_achievements?.join(', ')}\n`;
   }
 
+  const model = getOpenAIModel('interviewSynthesis');
+
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -414,7 +416,7 @@ async function conductInterviewSynthesis(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: RESEARCH_CONFIG.openai.model,
+      model,
       response_format: { type: "json_object" },
       messages: [
         {
