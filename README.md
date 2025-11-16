@@ -208,6 +208,194 @@ The app uses a sophisticated microservices architecture with four specialized Ed
 - **Performance Optimized:** Parallel processing and efficient API usage
 - **Security:** All API keys securely stored in Supabase secrets
 
+### 🔄 Interview Research Pipeline (Critical Flow)
+
+The interview research system operates in three distinct stages:
+
+#### **Stage 1: Concurrent Data Gathering** (~20 seconds)
+```
+┌─────────────────────────────────────────────────────────┐
+│         CONCURRENT PARALLEL EXECUTION                    │
+├─────────────────────────────────────────────────────────┤
+│                                                          │
+│  ┌─────────────────┐  ┌──────────────────┐  ┌────────┐ │
+│  │ Company Research│  │  Job Analysis    │  │CV Parse│ │
+│  │                 │  │                  │  │        │ │
+│  │ • Tavily search │  │ • Extract URLs   │  │ • Parse│ │
+│  │ • AI Analysis*  │  │ • AI Parsing*    │  │resume  │ │
+│  │                 │  │                  │  │        │ │
+│  │ ~18-20s         │  │ ~18-20s          │  │ ~12-15s│ │
+│  └────────┬────────┘  └────────┬─────────┘  └───┬────┘ │
+│           │                    │                 │       │
+└───────────┼────────────────────┼─────────────────┼──────┘
+            │                    │                 │
+            └────────────────────┴─────────────────┘
+                         ↓
+            Returns: CompanyInsights + JobRequirements + CVAnalysis
+            Stores: scraped_urls (cached content), tavily_searches (logs)
+```
+
+**Functions Called:**
+- `company-research`: Searches Tavily for interview data, analyzes with OpenAI
+- `job-analysis`: Extracts and parses job description from provided URLs
+- `cv-analysis`: Parses resume for skills and experience
+
+**Important**: These functions perform initial AI analysis on their respective domains (company insights, job requirements parsing). Raw research data is not persisted separately—results are structurally analyzed immediately.
+
+---
+
+#### **Stage 2: AI Synthesis** (~8-15 seconds)
+
+```
+┌──────────────────────────────────────────────────────┐
+│     UNIFIED SYNTHESIS (Single AI Call)               │
+├──────────────────────────────────────────────────────┤
+│                                                      │
+│  Input: CompanyInsights + JobRequirements + CV     │
+│         ↓                                            │
+│  OpenAI GPT-4o generates:                          │
+│  ├─ Interview Stages (4-6 stages from research)   │
+│  ├─ Personalized Guidance (role-specific tips)    │
+│  ├─ Preparation Timeline (day-by-day schedule)    │
+│  └─ Overall Fit Assessment                        │
+│                                                      │
+│  Output: AIResearchOutput JSON                     │
+│                                                      │
+│  ~8-15s total                                       │
+└──────────────────┬───────────────────────────────────┘
+                   ↓
+         Stores: interview_stages table
+         (4-6 rows, one per interview stage)
+```
+
+**Key Detail**: Interview stages are sourced from company research results. If Tavily extraction found the actual interview process from candidate reports, those stages are used directly. Otherwise, AI generates generic stages based on company/role.
+
+---
+
+#### **Stage 3: Parallel Post-Processing** (~10-25 seconds)
+
+```
+┌──────────────────────────────────────────────────────┐
+│    TWO PARALLEL OPERATIONS (no dependencies)         │
+├──────────────────────────────────────────────────────┤
+│                                                      │
+│  ┌──────────────────┐      ┌──────────────────────┐│
+│  │ CV-Job Analysis  │      │ Question Generation  ││
+│  │                  │      │                      ││
+│  │ • Skill gaps     │      │ Per Interview Stage: ││
+│  │ • Experience gaps│      │ • Behavioral Qs      ││
+│  │ • Fit assessment │      │ • Technical Qs       ││
+│  │ • Prep strategy  │      │ • Situational Qs     ││
+│  │                  │      │ • Company-specific   ││
+│  │ ~5-10s           │      │ • Role-specific      ││
+│  │                  │      │ • Experience-based   ││
+│  └────────┬─────────┘      │ • Cultural fit       ││
+│           │                │                      ││
+│           │                │ Total: 120-150 Qs   ││
+│           │                │ ~10-20s (per stage) ││
+│           │                └────────┬─────────────┘│
+│           │                         │              │
+└───────────┼─────────────────────────┼──────────────┘
+            │                         │
+            └─────────────┬───────────┘
+                          ↓
+           Stores: cv_job_comparisons table
+                  interview_questions table
+                  (120-150 question rows)
+```
+
+**Functions Called:**
+- `cv-job-comparison`: Analyzes CV against job requirements, generates prep strategy
+- `interview-question-generator`: Generates categorized questions for each interview stage
+
+**Critical Note**: These operations run in parallel—not sequentially. They don't depend on each other, only on Stage 1 data.
+
+---
+
+#### **Stage 4: Database Finalization** (~5-10 seconds)
+
+```
+Insert all collected data into database:
+├─ interview_stages (4-6 rows from synthesis)
+├─ interview_questions (120-150 rows, organized by stage)
+├─ cv_job_comparisons (1 row, comprehensive analysis)
+├─ resumes (1 row, parsed CV data)
+└─ searches (update status to 'completed')
+```
+
+---
+
+### Complete Pipeline Summary
+
+| Stage | Duration | Operation | Output |
+|-------|----------|-----------|--------|
+| **1. Gather** | ~20s | Parallel: company research, job analysis, CV parsing | CompanyInsights, JobRequirements, CVAnalysis |
+| **2. Synthesize** | ~8-15s | Single OpenAI call combining all data | AIResearchOutput (interview stages + guidance) |
+| **3. Analyze** | ~10-25s | Parallel: CV-job comparison + question generation | Comparison + 120-150 questions |
+| **4. Store** | ~5-10s | Batch insert all data | Complete database records |
+| **TOTAL** | **50-80s** | All stages execute with optimal parallelization | Full interview preparation package |
+
+---
+
+### Data Flow Diagram
+
+```
+User Input
+└─ Company, Role, CV, Target Seniority
+    ↓
+┌─────────────────────────────────────────┐
+│  Stage 1: Concurrent Gathering (20s)   │
+│  ├─ Company Research (Tavily + AI)     │
+│  ├─ Job Analysis (URL extraction)      │
+│  └─ CV Analysis (resume parsing)       │
+└─────────────┬───────────────────────────┘
+              ↓
+┌─────────────────────────────────────────┐
+│  Stage 2: AI Synthesis (8-15s)          │
+│  └─ OpenAI combines all data            │
+│     → Interview stages structure         │
+│     → Personalized guidance             │
+└─────────────┬───────────────────────────┘
+              ↓
+┌─────────────────────────────────────────┐
+│  Stage 3: Parallel Analysis (10-25s)    │
+│  ├─ CV-Job Comparison                   │
+│  └─ Question Generation (per stage)     │
+└─────────────┬───────────────────────────┘
+              ↓
+┌─────────────────────────────────────────┐
+│  Stage 4: Store Results (5-10s)         │
+│  ├─ Interview stages                    │
+│  ├─ Interview questions (120-150)       │
+│  ├─ CV-job comparison                   │
+│  └─ CV analysis                         │
+└─────────────┬───────────────────────────┘
+              ↓
+         Status: "completed"
+         Frontend displays results
+```
+
+---
+
+### Performance Notes
+
+- **Why so fast?** Stages 1-3 use aggressive parallelization and timeout management
+- **Bottlenecks?** Usually Tavily API (Stage 1) and Question generation (Stage 3)
+- **Configurable?** See [.env.example](.env.example) for timeout and Tavily limits
+- **Adjusting duration?** Reduce `CONCURRENT_TIMEOUTS` in config.ts or `tavily.maxResults` in .env
+
+### Monitoring & Debugging
+
+To monitor a search in progress:
+1. **Frontend**: ProgressDialog shows real-time `progress_step` updates
+2. **Logs**: Check Supabase Functions logs for each stage timing
+3. **Database**: Query `searches` table for `progress_percentage` and `progress_step`
+
+To debug failures:
+1. Check `searches.error_message` for the stage that failed
+2. Review function logs in Supabase Dashboard → Functions → Logs
+3. Verify environment variables are set in Supabase Edge Functions settings
+
 ## 🎯 Usage Examples
 
 ### Basic Company Research
