@@ -175,10 +175,13 @@ export const searchService = {
       );
 
       // Get CV-Job comparison data
+      // NOTE: RLS policy checks user_id, so we must also filter by the authenticated user
+      // This prevents 406 errors from PostgREST policy evaluation
       const { data: cvJobComparison, error: cvJobError } = await supabase
         .from("cv_job_comparisons")
         .select("*")
         .eq("search_id", searchId)
+        .eq("user_id", search.user_id)
         .single();
 
       // Handle missing CV-Job comparison data gracefully
