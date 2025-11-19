@@ -7,6 +7,7 @@ import { ProgressTracker, PROGRESS_STEPS, CONCURRENT_TIMEOUTS, executeWithTimeou
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
 interface InterviewResearchRequest {
@@ -453,24 +454,44 @@ async function saveToDatabase(
       async () => {
         const { data, error } = await supabase
           .from('search_artifacts')
-          .insert({
-            search_id: searchId,
-            user_id: userId,
+          .update({
             company_research_raw: rawData.company_research_raw,
             job_analysis_raw: rawData.job_analysis_raw,
             cv_analysis_raw: rawData.cv_analysis_raw,
             processing_status: 'raw_data_saved',
             processing_raw_save_at: new Date().toISOString()
-          });
+          })
+          .eq('search_id', searchId)
+          .select();
 
         if (error) throw error;
         return data;
       },
-      'Save raw data to search_artifacts'
+      'Update raw data in search_artifacts'
     );
 
-    if (!rawSaveResult) {
-      console.warn("⚠️ Raw data save failed, continuing...");
+    if (!rawSaveResult || rawSaveResult.length === 0) {
+      console.warn("⚠️ Raw data update touched no rows, attempting insert fallback...");
+      await withDbTimeout(
+        async () => {
+          const { error } = await supabase
+            .from('search_artifacts')
+            .insert({
+              search_id: searchId,
+              user_id: userId,
+              company_research_raw: rawData.company_research_raw,
+              job_analysis_raw: rawData.job_analysis_raw,
+              cv_analysis_raw: rawData.cv_analysis_raw,
+              interview_stages: synthesis.interview_stages || [],
+              processing_status: 'raw_data_saved',
+              processing_raw_save_at: new Date().toISOString()
+            });
+
+          if (error) throw error;
+          return true;
+        },
+        'Insert raw data fallback'
+      );
     } else {
       console.log("✅ Raw data saved");
     }
@@ -620,6 +641,7 @@ serve(async (req: Request) => {
   const tracker = new ProgressTracker("");
   let searchId = "";
   let userId = "";
+  let logger: SearchLogger | null = null;
 
   try {
     const requestData: InterviewResearchRequest = await req.json();
@@ -627,6 +649,15 @@ serve(async (req: Request) => {
     searchId = requestData.searchId;
     userId = requestData.userId;
     tracker.searchId = searchId;
+    logger = new SearchLogger(searchId, "interview-research", userId);
+
+    logger.log("REQUEST_RECEIVED", "INIT", {
+      company: requestData.company,
+      role: requestData.role,
+      country: requestData.country,
+      targetSeniority: requestData.targetSeniority,
+      roleLinkCount: requestData.roleLinks?.length || 0,
+    });
 
     console.log(`\n🚀 Starting interview research for search: ${searchId}`);
     console.log(`   Company: ${requestData.company}`);
@@ -645,7 +676,8 @@ serve(async (req: Request) => {
     // ============================================================
 
     console.log("\n📊 PHASE 1: Gathering research data...");
-    await tracker.updateStep(PROGRESS_STEPS.DATA_GATHERING_START);
+    logger?.log("PHASE_START", "DATA_GATHERING");
+    await tracker.updateStep('DATA_GATHERING_START');
 
     const [companyInsights, jobRequirements, cvAnalysis] = await Promise.allSettled([
       gatherCompanyData(requestData.company, requestData.role, requestData.country, searchId),
@@ -658,13 +690,19 @@ serve(async (req: Request) => {
     ]);
 
     console.log("\n✅ PHASE 1 Complete");
-    await tracker.updateStep(PROGRESS_STEPS.DATA_GATHERING_COMPLETE);
+    logger?.log("PHASE_COMPLETE", "DATA_GATHERING", {
+      hasCompanyInsights: !!companyInsights,
+      hasJobRequirements: !!jobRequirements,
+      hasCvAnalysis: !!cvAnalysis
+    });
+    await tracker.updateStep('DATA_GATHERING_COMPLETE');
 
     // ============================================================
     // Save raw data immediately to search_artifacts
     // ============================================================
 
     console.log("\n💾 PHASE 2: Saving raw research data...");
+    logger?.log("PHASE_START", "RAW_DATA_SAVE");
 
     const rawData: RawResearchData = {
       company_research_raw: companyInsights,
@@ -676,14 +714,15 @@ serve(async (req: Request) => {
       async () => {
         const { error } = await supabase
           .from('search_artifacts')
-          .insert({
+          .upsert({
             search_id: searchId,
             user_id: userId,
             ...rawData,
+            interview_stages: [],
             processing_status: 'raw_data_saved',
             processing_started_at: new Date().toISOString(),
             processing_raw_save_at: new Date().toISOString()
-          });
+          }, { onConflict: 'search_id' });
 
         if (error) {
           console.warn("⚠️ Failed to save raw data:", error.message);
@@ -695,13 +734,15 @@ serve(async (req: Request) => {
     );
 
     console.log("✅ Raw data saved to database");
+    logger?.log("PHASE_COMPLETE", "RAW_DATA_SAVE");
 
     // ============================================================
     // PHASE 3: Unified Synthesis (20-30 seconds)
     // ============================================================
 
     console.log("\n🔄 PHASE 3: Unified synthesis...");
-    await tracker.updateStep(PROGRESS_STEPS.AI_SYNTHESIS_START);
+    logger?.log("PHASE_START", "UNIFIED_SYNTHESIS");
+    await tracker.updateStep('AI_SYNTHESIS_START');
 
     const synthesis = await unifiedSynthesis(
       requestData.company,
@@ -715,31 +756,39 @@ serve(async (req: Request) => {
     );
 
     if (!synthesis) {
+      logger?.log("PHASE_FAILED", "UNIFIED_SYNTHESIS", null, "Synthesis returned null");
       throw new Error("Synthesis failed");
     }
 
     console.log("✅ PHASE 3 Complete");
-    await tracker.updateStep(PROGRESS_STEPS.AI_SYNTHESIS_COMPLETE);
+    logger?.log("PHASE_COMPLETE", "UNIFIED_SYNTHESIS", {
+      stageCount: synthesis.interview_stages?.length || 0,
+      questionCategories: Object.keys(synthesis.interview_questions_data || {})
+    });
+    await tracker.updateStep('AI_SYNTHESIS_COMPLETE');
 
     // ============================================================
     // PHASE 4: Save all results to database
     // ============================================================
 
     console.log("\n💾 PHASE 4: Saving all results to database...");
-    await tracker.updateStep(PROGRESS_STEPS.QUESTION_GENERATION_START);
+    logger?.log("PHASE_START", "DATABASE_SAVE");
+    await tracker.updateStep('QUESTION_GENERATION_START');
 
     await saveToDatabase(supabase, searchId, userId, rawData, synthesis);
 
     console.log("✅ PHASE 4 Complete");
-    await tracker.updateStep(PROGRESS_STEPS.QUESTION_GENERATION_COMPLETE);
+    logger?.log("PHASE_COMPLETE", "DATABASE_SAVE");
+    await tracker.updateStep('QUESTION_GENERATION_COMPLETE');
 
     // ============================================================
     // Success response
     // ============================================================
 
     console.log(`\n✅ Interview research complete for search: ${searchId}`);
+    logger?.log("FUNCTION_SUCCESS", "COMPLETE");
 
-    await tracker.markComplete();
+    await tracker.markCompleted();
 
     return new Response(
       JSON.stringify({
@@ -756,6 +805,12 @@ serve(async (req: Request) => {
 
   } catch (error) {
     console.error("❌ Error in interview-research:", error);
+    logger?.log(
+      "FUNCTION_ERROR",
+      "GLOBAL",
+      null,
+      error instanceof Error ? error.message : String(error)
+    );
 
     if (searchId && userId) {
       // Mark search as failed in database
@@ -764,14 +819,17 @@ serve(async (req: Request) => {
         Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "",
       );
 
-      await supabase
-        .from('searches')
-        .update({
-          search_status: 'failed',
-          error_message: error instanceof Error ? error.message : 'Unknown error'
-        })
-        .eq('id', searchId)
-        .catch(err => console.error("Failed to mark search as failed:", err));
+      try {
+        await supabase
+          .from('searches')
+          .update({
+            search_status: 'failed',
+            error_message: error instanceof Error ? error.message : 'Unknown error'
+          })
+          .eq('id', searchId);
+      } catch (markError) {
+        console.error("Failed to mark search as failed:", markError);
+      }
     }
 
     return new Response(
@@ -784,5 +842,13 @@ serve(async (req: Request) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" }
       }
     );
+  } finally {
+    if (logger) {
+      try {
+        await logger.saveToFile();
+      } catch (logError) {
+        console.error("Failed to persist search logger output:", logError);
+      }
+    }
   }
 });
