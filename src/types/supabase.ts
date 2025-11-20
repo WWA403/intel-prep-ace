@@ -14,63 +14,6 @@ export type Database = {
   }
   public: {
     Tables: {
-      cv_job_comparisons: {
-        Row: {
-          created_at: string
-          experience_gap_analysis: Json
-          id: string
-          interview_prep_strategy: Json
-          overall_fit_score: number
-          personalized_story_bank: Json
-          preparation_priorities: string[] | null
-          search_id: string | null
-          skill_gap_analysis: Json
-          updated_at: string
-          user_id: string | null
-        }
-        Insert: {
-          created_at?: string
-          experience_gap_analysis: Json
-          id?: string
-          interview_prep_strategy: Json
-          overall_fit_score?: number
-          personalized_story_bank: Json
-          preparation_priorities?: string[] | null
-          search_id?: string | null
-          skill_gap_analysis: Json
-          updated_at?: string
-          user_id?: string | null
-        }
-        Update: {
-          created_at?: string
-          experience_gap_analysis?: Json
-          id?: string
-          interview_prep_strategy?: Json
-          overall_fit_score?: number
-          personalized_story_bank?: Json
-          preparation_priorities?: string[] | null
-          search_id?: string | null
-          skill_gap_analysis?: Json
-          updated_at?: string
-          user_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "cv_job_comparisons_search_id_fkey"
-            columns: ["search_id"]
-            isOneToOne: false
-            referencedRelation: "searches"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "cv_job_comparisons_search_id_fkey"
-            columns: ["search_id"]
-            isOneToOne: false
-            referencedRelation: "stalled_searches"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       function_executions: {
         Row: {
           created_at: string
@@ -666,6 +609,90 @@ export type Database = {
         }
         Relationships: []
       }
+      search_artifacts: {
+        Row: {
+          company_research_raw: Json | null
+          comparison_analysis: Json | null
+          created_at: string | null
+          cv_analysis_raw: Json | null
+          id: string
+          interview_questions_data: Json | null
+          interview_stages: Json
+          job_analysis_raw: Json | null
+          preparation_guidance: Json | null
+          processing_completed_at: string | null
+          processing_error_message: string | null
+          processing_raw_save_at: string | null
+          processing_started_at: string | null
+          processing_status: string
+          processing_synthesis_end_at: string | null
+          processing_synthesis_start_at: string | null
+          search_id: string
+          synthesis_metadata: Json | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          company_research_raw?: Json | null
+          comparison_analysis?: Json | null
+          created_at?: string | null
+          cv_analysis_raw?: Json | null
+          id?: string
+          interview_questions_data?: Json | null
+          interview_stages: Json
+          job_analysis_raw?: Json | null
+          preparation_guidance?: Json | null
+          processing_completed_at?: string | null
+          processing_error_message?: string | null
+          processing_raw_save_at?: string | null
+          processing_started_at?: string | null
+          processing_status?: string
+          processing_synthesis_end_at?: string | null
+          processing_synthesis_start_at?: string | null
+          search_id: string
+          synthesis_metadata?: Json | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          company_research_raw?: Json | null
+          comparison_analysis?: Json | null
+          created_at?: string | null
+          cv_analysis_raw?: Json | null
+          id?: string
+          interview_questions_data?: Json | null
+          interview_stages?: Json
+          job_analysis_raw?: Json | null
+          preparation_guidance?: Json | null
+          processing_completed_at?: string | null
+          processing_error_message?: string | null
+          processing_raw_save_at?: string | null
+          processing_started_at?: string | null
+          processing_status?: string
+          processing_synthesis_end_at?: string | null
+          processing_synthesis_start_at?: string | null
+          search_id?: string
+          synthesis_metadata?: Json | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "search_artifacts_search_id_fkey"
+            columns: ["search_id"]
+            isOneToOne: false
+            referencedRelation: "searches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "search_artifacts_search_id_fkey"
+            columns: ["search_id"]
+            isOneToOne: false
+            referencedRelation: "stalled_searches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       searches: {
         Row: {
           company: string
@@ -1134,5 +1161,3 @@ export const Constants = {
     },
   },
 } as const
-A new version of Supabase CLI is available: v2.54.11 (currently installed v2.20.12)
-We recommend updating regularly for new features and bug fixes: https://supabase.com/docs/guides/cli/getting-started#updating-the-supabase-cli

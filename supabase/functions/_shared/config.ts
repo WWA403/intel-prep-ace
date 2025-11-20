@@ -2,20 +2,42 @@
 // Adjust these values to fine-tune the research process
 
 export const RESEARCH_CONFIG = {
-  // OpenAI Configuration
+  // OpenAI Configuration - Flexible model selection per use case
   openai: {
-    model: 'gpt-4o',
+    // Default models
+    defaultModel: 'gpt-4o',
     fallbackModel: 'gpt-4o-mini', // Used for less critical operations
+
+    // Process-specific models (can be overridden per operation)
+    // Use these to control which model is used for each critical operation
+    models: {
+      // Critical processes (core interview prep) - use latest powerful model
+      companyResearch: 'gpt-4o',           // Company insights analysis
+      jobAnalysis: 'gpt-4o',               // Job requirements analysis
+      cvAnalysis: 'gpt-4o',                // CV parsing and skill extraction
+      interviewSynthesis: 'gpt-4o',        // Final synthesis of all data
+      cvJobComparison: 'gpt-4o',           // CV vs Job analysis
+
+      // Important processes - can use balanced model
+      questionGeneration: 'gpt-4o-mini',   // Question generation (high volume, less critical)
+
+      // Supporting processes - can use lightweight model
+      contentSummarization: 'gpt-4o-mini', // Summarizing research content
+      contentQualityScoring: 'gpt-4o-mini', // Scoring content relevance
+    },
+
     maxTokens: {
       companyAnalysis: 5000,
       interviewSynthesis: 5000,
       cvAnalysis: 3000,
       questionGeneration: 3000,
+      cvJobComparison: 4000,  // Added for CV-Job comparison
     },
     temperature: {
       analysis: 0.3,      // More deterministic for factual analysis
       synthesis: 0.5,     // More creative for personalized guidance
       questions: 0.5,     // Balanced for question generation
+      comparison: 0.5,    // Balanced for CV-Job comparison
     },
     useJsonMode: true,    // Force JSON responses for reliability
   },
@@ -259,6 +281,43 @@ export const RESEARCH_CONFIG = {
 };
 
 // Utility functions for configuration
+
+/**
+ * Get the appropriate OpenAI model for a specific operation
+ * @param operation - The operation type (e.g., 'cvJobComparison', 'questionGeneration')
+ * @returns The model name to use for this operation
+ */
+export const getOpenAIModel = (
+  operation: keyof typeof RESEARCH_CONFIG.openai.models = 'interviewSynthesis'
+): string => {
+  const model = RESEARCH_CONFIG.openai.models[operation];
+  return model || RESEARCH_CONFIG.openai.defaultModel;
+};
+
+/**
+ * Get the max tokens for a specific operation
+ * @param operation - The operation type
+ * @returns The max tokens limit for this operation
+ */
+export const getMaxTokens = (
+  operation: keyof typeof RESEARCH_CONFIG.openai.maxTokens = 'interviewSynthesis'
+): number => {
+  const tokens = RESEARCH_CONFIG.openai.maxTokens[operation];
+  return tokens || 3000;
+};
+
+/**
+ * Get the temperature setting for a specific operation type
+ * @param operationType - The type of operation (analysis, synthesis, questions, comparison)
+ * @returns The temperature value for this operation
+ */
+export const getTemperature = (
+  operationType: keyof typeof RESEARCH_CONFIG.openai.temperature = 'synthesis'
+): number => {
+  const temp = RESEARCH_CONFIG.openai.temperature[operationType];
+  return temp !== undefined ? temp : 0.5;
+};
+
 export const getCompanyTicker = (companyName: string): string => {
   return RESEARCH_CONFIG.search.companyTickers[companyName.toLowerCase()] || companyName.toUpperCase();
 };

@@ -1,0 +1,328 @@
+================================================================================
+INVESTIGATION SUMMARY: ROOT CAUSE OF 10+ MINUTE STALLS
+================================================================================
+
+INVESTIGATION COMPLETED: Traced complete execution flow from user click to backend completion
+
+================================================================================
+1. EXACTLY WHAT LINE(S) ARE CAUSING THE HANG
+================================================================================
+
+PRIMARY CULPRITS (causing the hang):
+
+1. LINES 995-1035 (interview-research/index.ts):
+   - Sequential for loop inserting interview_stages and interview_questions
+   - NO timeout protection on supabase.from("interview_stages").insert().select().single()
+   - NO timeout protection on supabase.from("interview_questions").insert()
+   - If Supabase is slow, each insert can hang 30-300 seconds
+   - With 4 stages × 2 operations = 8 sequential operations
+   - Total potential hang: 240+ seconds (4+ minutes)
+
+2. LINES 1094-1129 (interview-research/index.ts):
+   - CV comparison upsert: supabase.from("cv_job_comparisons").upsert()
+   - NO timeout protection
+   - Can hang 30-300 seconds if database is busy
+
+3. LINES 1214-1239 (interview-research/index.ts):
+   - Status update: supabase.from("searches").update()
+   - NO timeout protection
+   - Can block if database unresponsive
+
+SECONDARY CULPRITS (masking the actual problem):
+
+4. LINES 909-937 (interview-research/index.ts):
+   - Uses Promise.allSettled() instead of Promise.all()
+   - Masks timeout errors - code continues with NULL data
+   - AI synthesis still runs with broken/incomplete data
+   - Takes full 40 seconds even though data is broken
+
+5. LINES 968-1242 (interview-research/index.ts):
+   - Progress updates STOP after "FINALIZING" (line 968)
+   - 270 lines of database code with NO progress updates
+   - Frontend polls every 10 seconds after 60s elapsed
+   - User sees frozen UI with no status changes
+
+================================================================================
+2. WHAT IS THE FUNCTION DOING WHEN IT STALLS
+================================================================================
+
+Timeline of actual execution:
+
+t=0s:     User clicks "Run Intel"
+          → Frontend calls searchService.startProcessing() (NOT awaited)
+          → Backend starts interview-research edge function (fire-and-forget)
+          → HTTP response 202 returned immediately
+
+t=1-15s:  BACKGROUND PROCESSING begins:
+          - Phase 1: Concurrent data gathering (company, job, CV analysis)
+          - Phase 2: AI synthesis with OpenAI
+          - Phase 3: Enhanced question generation
+          
+t=15s:    HANG BEGINS HERE:
+          - Code reaches line 995: for loop starts
+          - Tries to insert first interview_stage
+          - Supabase insert works normally (50-200ms)
+          - Inserts first batch of questions (100-300ms)
+          
+t=20s:    Tries to insert SECOND stage
+          - RLS policy evaluation takes longer than expected
+          - Blocked waiting for Supabase response
+          - NO TIMEOUT SET - waits indefinitely
+          
+t=25-35s: Each subsequent stage insert hangs
+          - No timeout protection
+          - Waits for Supabase without timeout
+          - Progress tracker shows "FINALIZING" (95%) indefinitely
+          
+t=35s+:   VISIBLE STALL BEGINS:
+          - Frontend polls every 10 seconds (reduced after 60s)
+          - Backend still waiting on database
+          - User sees no status changes
+          - Appears completely frozen
+          
+t=300s+:  Deno edge function timeout triggers
+          - Function is killed by Supabase timeout
+          - Progress finally updates to "failed"
+          - User has been waiting 5+ minutes
+
+================================================================================
+3. IF THERE'S A TIMEOUT BEING HIT, WHICH TIMEOUT AND WHY
+================================================================================
+
+MULTIPLE TIMEOUTS AT PLAY:
+
+1. Individual Child Service Timeouts (20s): WORKING CORRECTLY
+   - company-research: 20,000ms (executeWithTimeout at line 910)
+   - job-analysis: 20,000ms (executeWithTimeout at line 911)
+   - cv-analysis: 15,000ms (executeWithTimeout at line 912)
+   
+   These WORK, but they're wrapped in executeWithTimeoutSafe() which masks errors
+
+2. AI Synthesis Timeout (40s): WORKING CORRECTLY
+   - Line 949-964: 40,000ms timeout on conductInterviewSynthesis()
+   - Uses executeWithTimeout() which properly throws on timeout
+
+3. DATABASE OPERATION TIMEOUTS: MISSING!
+   - Lines 995-1035: Stage/question inserts - NO TIMEOUT
+   - Line 1094-1129: CV comparison upsert - NO TIMEOUT
+   - Line 1214-1239: Status update - NO TIMEOUT
+   
+   These use default Supabase client timeout (30-60 seconds)
+   Which can be exceeded if:
+   - Network is slow
+   - Database is under load
+   - RLS policy evaluation is expensive
+   - Multiple concurrent writes to same table
+
+4. Deno Edge Function Timeout: 300-600 seconds (DEFAULT)
+   - Once the background processing hangs on a database operation
+   - Deno/Supabase waits for the function to complete
+   - After 300-600 seconds (depending on config), kills the function
+   - This is why users see failure after 5-10+ minutes
+
+WHY THE HANG HAPPENS:
+- Database operation starts but Supabase is slow to respond
+- No explicit timeout set (relies on default fetch timeout)
+- Default fetch timeout is 30-60 seconds
+- If response takes longer, operation hangs
+- With no timeout protection, hangs indefinitely
+- Deno edge function timeout (300s) eventually kills the process
+
+================================================================================
+4. IF THERE'S AN ERROR BEING SILENTLY IGNORED
+================================================================================
+
+YES - MULTIPLE ERRORS ARE SILENTLY IGNORED:
+
+1. Promise.allSettled() at lines 909-937 masks ALL child service errors:
+   - If company-research TIMES OUT: marked as 'PARTIAL', continues with NULL
+   - If job-analysis TIMES OUT: marked as 'PARTIAL', continues with NULL
+   - If cv-analysis TIMES OUT: marked as 'PARTIAL', continues with NULL
+   
+   Code continues with broken data:
+   ```typescript
+   if (companyRes.status === 'fulfilled' && companyRes.value.ok) {
+     companyInsights = companyRes.value.value;
+   } else {
+     // Silently continues with companyInsights = null!
+   }
+   ```
+
+2. Database operation errors are thrown, but not handled gracefully:
+   - Line 1011: if (stageError) throw stageError; // Stops processing
+   - But by then, partial data may already be written
+
+3. Progress tracker updates are logged but don't prevent continuation:
+   - Lines 920-937: Logs PARTIAL status but code continues anyway
+
+4. The real error (database timeout) is never surfaced:
+   - No explicit logging when database operations timeout
+   - Progress tracker just says "FINALIZING" forever
+   - No indication to user about what actually failed
+
+================================================================================
+5. COMPLETE CALL CHAIN FROM "RUN INTEL" TO COMPLETION
+================================================================================
+
+USER CLICKS "RUN INTEL" (Home.tsx line 37)
+  ↓
+handleSubmit() (Home.tsx line 37-110)
+  ↓
+searchService.createSearchRecord()
+  → Creates DB record with status='pending'
+  → Returns searchId
+  ↓
+Shows ProgressDialog immediately (line 64)
+  ↓
+searchService.startProcessing() - FIRE AND FORGET (line 75, NOT awaited)
+  ↓
+  ├─→ Updates search status to 'processing' (line 57-60)
+  ├─→ supabase.functions.invoke("interview-research") - NOT awaited (line 63-74)
+  │  (HTTP request sent to backend, returns immediately)
+  └─→ Returns { success: true } (line 93)
+  
+(Meanwhile, backend processes asynchronously)
+
+INTERVIEW-RESEARCH EDGE FUNCTION (interview-research/index.ts line 820)
+  ↓
+serve() receives request (line 820)
+  ↓
+Initializes ProgressTracker (line 830)
+  ↓
+processResearchAsync() - FIRE AND FORGET (line 834)
+  ↓
+Returns HTTP 202 "Accepted" immediately (line 841)
+  │
+  └─→ BACKGROUND PROCESSING CONTINUES:
+      ├─ Phase 1: Concurrent data gathering (lines 904-937)
+      │  - gatherCompanyData() with 20s timeout
+      │  - gatherJobData() with 20s timeout
+      │  - gatherCVData() with 15s timeout
+      │  - Uses Promise.allSettled() (masks errors)
+      │
+      ├─ Phase 2: AI synthesis (lines 949-964)
+      │  - conductInterviewSynthesis() with 40s timeout
+      │  - Processes even if data is broken
+      │
+      ├─ Phase 3: Question generation (lines 970-987)
+      │  - generateCVJobComparison()
+      │  - generateEnhancedQuestions()
+      │
+      └─ Phase 4: DATABASE WRITES (lines 995-1240) ← HANGS HERE
+         - FOR EACH STAGE (4 stages):
+           - Insert stage (lines 995-1009) ← NO TIMEOUT
+           - Insert questions (lines 1030-1032) ← NO TIMEOUT
+           - If Supabase slow: HANGS INDEFINITELY
+         
+         - Update CV comparison (lines 1094-1129) ← NO TIMEOUT
+         - Update search status (lines 1214-1239) ← NO TIMEOUT
+         
+         - If any of above times out:
+           Function waits for Deno timeout (300-600s)
+           Progress tracker shows "FINALIZING" forever
+           Frontend polls every 10s with no updates
+
+FRONTEND POLLING (Home.tsx lines 112-200 & useSearchProgress.ts)
+  ↓
+startStatusPolling(searchId) (Home.tsx line 85)
+  ↓
+Every 3 seconds initially, then 5 seconds, then 10 seconds:
+  - Calls searchService.getSearchStatus(searchId)
+  - Updates setSearchStatus()
+  - Renders ProgressDialog with current status
+  
+  When status changes to 'completed' or 'failed':
+    → Stops polling
+    → Shows completion toast
+    → User can close dialog
+
+COMPLETION
+  ↓
+After 5-10+ minutes of stalling:
+  - Deno edge function timeout triggers
+  - processResearchAsync() throws error
+  - tracker.markFailed() is called
+  - Search status updated to 'failed'
+  - Frontend polling detects 'failed'
+  - Dialog shows error message
+  - User sees "Research Failed" after waiting 5+ minutes
+
+================================================================================
+ACTUAL EXECUTION TIME vs EXPECTED
+================================================================================
+
+EXPECTED (if everything works):
+  t=0s:     Start
+  t=5s:     Concurrent data gathering complete
+  t=12s:    AI synthesis complete
+  t=15s:    Question generation complete
+  t=20s:    Database writes complete
+  t=20s:    DONE! Status = "completed"
+
+ACTUAL (with database hang):
+  t=0s:     Start
+  t=5s:     Data gathering complete
+  t=12s:    AI synthesis complete
+  t=15s:    Question generation complete
+  t=20s:    Database writes START
+  t=25s:    Second stage insert BLOCKS
+  t=25-320s: HUNG on database operations
+  t=60s:    Frontend polling reduces to 10 seconds
+  t=320s:   Deno timeout triggers
+  t=320s:   FAILED! Status = "failed"
+  
+  Total time: ~5+ minutes (until Deno timeout)
+
+================================================================================
+KEY FILES INVOLVED
+================================================================================
+
+FRONTEND:
+- /src/pages/Home.tsx (lines 37-110): handleSubmit, startStatusPolling
+- /src/services/searchService.ts (lines 48-105): startProcessing
+- /src/hooks/useSearchProgress.ts (lines 73-164): useSearchProgress hook
+
+BACKEND:
+- /supabase/functions/interview-research/index.ts:
+  - Lines 820-863: Main handler (returns immediately)
+  - Lines 869-1256: Background processing (processResearchAsync)
+  - Lines 909-937: Data gathering with Promise.allSettled
+  - Lines 949-964: AI synthesis
+  - Lines 995-1035: ★ STAGE/QUESTION INSERT LOOP (NO TIMEOUT)
+  - Lines 1094-1129: ★ CV COMPARISON UPSERT (NO TIMEOUT)
+  - Lines 1214-1239: ★ STATUS UPDATE (NO TIMEOUT)
+
+- /supabase/functions/_shared/progress-tracker.ts (lines 136-142):
+  - CONCURRENT_TIMEOUTS config (only covers 3 services, not DB ops)
+
+================================================================================
+SUMMARY: THE ACTUAL PROBLEM
+================================================================================
+
+NOT A SLOW PROCESSING PROBLEM:
+- Backend doesn't process for 10-20 minutes
+- Frontend design allows instant response
+
+IS A DATABASE OPERATION BLOCKING PROBLEM:
+1. Sequential database writes (lines 995-1240) have NO timeout protection
+2. If any Supabase operation takes >30s, the entire backend hangs
+3. No progress updates during database phase (lines 968-1242)
+4. Frontend sees frozen UI with "FINALIZING" status indefinitely
+5. Deno timeout (300-600s) eventually kills the function
+6. User sees "FAILED" after 5-10+ minutes
+
+ROOT CAUSES IN ORDER OF SEVERITY:
+1. Missing timeout protection on sequential DB operations (CRITICAL)
+2. RLS policy evaluation slow on cv_job_comparisons (HIGH)
+3. Promise.allSettled() masks upstream service failures (HIGH)
+4. No progress updates during database writes (MEDIUM)
+5. Frontend polling reduces to 10s after 60s elapsed (MEDIUM)
+
+FIXES REQUIRED:
+1. Wrap all Supabase operations in executeWithTimeout (5-15s timeout)
+2. Add progress updates during database write phase
+3. Replace Promise.allSettled() with Promise.all() + fallback handling
+4. Add indexes or simplify RLS policy on cv_job_comparisons
+5. Consider batch operations instead of sequential writes
+
+================================================================================

@@ -4,7 +4,7 @@ import { searchTavily, extractTavily, extractInterviewReviewUrls, TavilySearchRe
 import { searchWithFallback } from "../_shared/duckduckgo-fallback.ts";
 import { callOpenAI, parseJsonResponse, OpenAIRequest } from "../_shared/openai-client.ts";
 import { SearchLogger } from "../_shared/logger.ts";
-import { RESEARCH_CONFIG, getAllSearchQueries } from "../_shared/config.ts";
+import { RESEARCH_CONFIG, getAllSearchQueries, getOpenAIModel } from "../_shared/config.ts";
 import { UrlDeduplicationService } from "../_shared/url-deduplication.ts";
 import { createHybridScraper, InterviewExperience } from "../_shared/native-scrapers.ts";
 
@@ -355,7 +355,7 @@ async function analyzeCompanyData(
   }
 
   const openaiRequest: OpenAIRequest = {
-    model: RESEARCH_CONFIG.openai.model,
+    model: getOpenAIModel('companyResearch'),
     systemPrompt: `You are an expert company research analyst specializing in interview preparation. Based on the provided research data from Glassdoor, Blind, 1point3acres, Reddit, LinkedIn, and other sources, extract comprehensive company insights with focus on recent interview trends (2024-2025).
 
 Focus on REAL candidate experiences from the raw content provided:

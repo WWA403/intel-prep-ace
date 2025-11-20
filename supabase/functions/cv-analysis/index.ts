@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1';
 import { Logger } from '../_shared/logging.ts';
+import { getOpenAIModel } from '../_shared/config.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -100,7 +101,7 @@ async function analyzeCV(
   userId: string
 ): Promise<CVAnalysis> {
   const requestPayload = {
-    model: 'gpt-4o-mini',
+    model: getOpenAIModel('cvAnalysis'),
     messages: [
       {
         role: 'system',
@@ -161,7 +162,7 @@ ${cvText}`
       searchId,
       userId,
       functionName: 'cv-analysis',
-      model: 'gpt-4o-mini'
+      model: getOpenAIModel('cvAnalysis')
     }
   );
 
