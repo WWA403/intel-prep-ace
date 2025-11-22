@@ -708,6 +708,129 @@ Per-Search Override:
 
 ---
 
+#### **PHASE 4: Quality & Infrastructure** (Ongoing)
+
+<details>
+<summary><b>Epic 4.1: Critical Component Testing</b> ⏱️ Ongoing</summary>
+
+**User Story**: As a developer, I want critical components to be tested so we can catch regressions and ensure core functionality works reliably.
+
+**Goals**:
+- Add testing for critical components without over-engineering
+- Focus on core functionality that impacts user experience
+- Ensure test coverage for business-critical paths
+
+**Tasks**:
+- [ ] Identify critical components (e.g., search service, question generation, authentication)
+- [ ] Set up testing framework (Jest/Vitest + React Testing Library)
+- [ ] Write unit tests for core services (searchService, sessionSampler)
+- [ ] Write integration tests for critical user flows (search → results → practice)
+- [ ] Add tests for Edge Functions (interview-research, question-generator)
+- [ ] Set up CI/CD test pipeline
+- [ ] Document testing strategy and coverage goals
+
+**Testing Priorities**:
+- ✅ Authentication flow (login, signup, session management)
+- ✅ Search service (API calls, data transformation)
+- ✅ Question generation and filtering logic
+- ✅ Practice session management
+- ⚠️ UI components (lower priority, focus on logic)
+
+**Approach**:
+- Don't test every single component
+- Focus on business logic and critical user paths
+- Keep tests maintainable and fast
+- Use integration tests over unit tests where appropriate
+
+**Files to Create/Change**:
+- `src/__tests__/` - Test directory structure
+- `src/services/__tests__/` - Service tests
+- `supabase/functions/__tests__/` - Edge function tests
+- `vitest.config.ts` or `jest.config.js` - Test configuration
+</details>
+
+<details>
+<summary><b>Epic 4.2: Research Pipeline Enhancements</b> ⏱️ Ongoing</summary>
+
+**User Story**: As a product, we want to continuously improve the research pipeline to provide better, more accurate interview preparation data.
+
+**Goals**:
+- Identify and implement enhancements to the research pipeline
+- Improve data quality and relevance
+- Optimize performance and reliability
+- Explore new data sources and AI capabilities
+
+**Tasks**:
+- [ ] Analyze current pipeline performance and identify bottlenecks
+- [ ] Research additional data sources (beyond Glassdoor, Levels.fyi, Blind)
+- [ ] Improve AI prompt engineering for better question quality
+- [ ] Enhance company research accuracy and coverage
+- [ ] Optimize Tavily search queries for better results
+- [ ] Add fallback mechanisms for API failures
+- [ ] Implement caching strategies for repeated searches
+- [ ] Explore advanced AI features (multi-modal, better context understanding)
+- [ ] Add quality metrics and monitoring
+
+**Areas for Enhancement**:
+- **Data Sources**: Explore additional platforms (Reddit, Quora, company blogs)
+- **AI Quality**: Better prompt engineering, fine-tuning, structured outputs
+- **Performance**: Parallel processing, caching, incremental updates
+- **Reliability**: Better error handling, retry logic, graceful degradation
+- **Accuracy**: Validation mechanisms, user feedback loops
+
+**Files to Review/Change**:
+- `supabase/functions/interview-research/index.ts` - Main research orchestrator
+- `supabase/functions/company-research/index.ts` - Company data gathering
+- `supabase/functions/_shared/tavily-client.ts` - Search optimization
+- `supabase/functions/_shared/openai-client.ts` - AI prompt improvements
+</details>
+
+<details>
+<summary><b>Epic 4.3: Front-End UI/UX Improvements</b> ⏱️ Ongoing</summary>
+
+**User Story**: As a user, I want a clean, intuitive interface where components don't overlap and all steps are clearly visible.
+
+**Goals**:
+- Fix component overlapping issues
+- Ensure all workflow steps are visible and accessible
+- Improve visual hierarchy and spacing
+- Create a more polished, professional interface
+
+**Tasks**:
+- [ ] Audit current UI for overlapping components
+- [ ] Fix z-index and positioning issues
+- [ ] Improve responsive design for mobile/tablet/desktop
+- [ ] Add missing UI steps in workflows (e.g., search → results → practice flow)
+- [ ] Improve spacing and layout consistency
+- [ ] Enhance visual feedback for user actions
+- [ ] Add loading states and transitions
+- [ ] Improve error messages and empty states
+- [ ] Conduct usability testing and gather feedback
+
+**Known Issues**:
+- Components overlapping with each other
+- Missing steps in user workflows
+- Inconsistent spacing and layout
+- Unclear visual hierarchy
+
+**Areas to Improve**:
+- **Layout**: Fix overlapping components, improve grid/flex layouts
+- **Navigation**: Ensure all steps are accessible, add breadcrumbs/progress indicators
+- **Responsive Design**: Better mobile experience, tablet optimization
+- **Visual Polish**: Consistent spacing, better typography, improved color usage
+- **User Feedback**: Better loading states, error messages, success indicators
+
+**Files to Review/Change**:
+- `src/pages/Home.tsx` - Search interface
+- `src/pages/Dashboard.tsx` - Results display
+- `src/pages/Practice.tsx` - Practice mode
+- `src/components/Navigation.tsx` - Navigation structure
+- `src/components/ui/` - Component library consistency
+- `src/index.css` - Global styles and spacing
+</details>
+
+---
+
 ### 📊 Priority Matrix
 
 | Epic | Priority | Effort | User Impact | Business Value |
@@ -721,6 +844,9 @@ Per-Search Override:
 | **2.3 Timer Presets** | 🟢 Medium | Low | Low | Low |
 | **3.1 Analytics Dashboard** | 🟢 Medium | Medium | Medium | Medium |
 | **3.2 Performance** | 🟡 High | Medium | High | High |
+| **4.1 Critical Component Testing** | 🟡 High | Medium | High | High |
+| **4.2 Research Pipeline Enhancements** | 🟡 High | High | Very High | Very High |
+| **4.3 Front-End UI/UX Improvements** | 🟡 High | Medium | Very High | High |
 
 ---
 
