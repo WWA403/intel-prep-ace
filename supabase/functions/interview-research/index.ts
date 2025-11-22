@@ -272,11 +272,17 @@ Your task is to create a COMPREHENSIVE, DEEPLY TAILORED interview preparation gu
 CRITICAL REQUIREMENTS:
 1. Generate 4 realistic interview stages based on ACTUAL company hiring process from candidate reports
 2. Create a detailed CV-to-Job comparison analysis with specific skill gaps and experience mapping
-3. Generate 30-50 HIGHLY TAILORED interview questions across 7 categories (5-8 per category) - QUALITY OVER QUANTITY
+3. Generate MINIMUM 30 questions (target 30-50) HIGHLY TAILORED interview questions across 7 categories - THIS IS MANDATORY
 4. Provide personalized preparation guidance based on candidate's specific background
 
+QUESTION COUNT REQUIREMENT - MANDATORY:
+- MINIMUM 30 questions total across all categories (this is a hard requirement, not a suggestion)
+- TARGET 30-50 questions total (aim for 5-8 questions per category)
+- DISTRIBUTION: Ensure at least 3-4 questions per category minimum
+- If you cannot generate 30+ questions, you MUST generate more variations and extensions of the real questions provided
+
 QUALITY REQUIREMENTS - STRICTLY ENFORCE:
-- QUALITY OVER QUANTITY: Generate fewer questions (30-50 total) but ensure EVERY question is deeply tailored and highly relevant
+- QUALITY OVER QUANTITY: Generate 30-50 questions total, ensuring EVERY question is deeply tailored and highly relevant
 - QUESTION-FIRST APPROACH: Use the REAL interview questions provided as the foundation. Generate variations, extensions, and context-specific versions of these actual questions.
 - DEEP TAILORING: 100% of questions must reference specific details from:
   * Candidate's work history, projects, and achievements
@@ -299,14 +305,16 @@ FORBIDDEN:
 
 QUESTION GENERATION STRATEGY:
 1. Start with REAL questions from candidate reports - use these as templates
-2. Generate 5-8 HIGHLY TAILORED questions per category (30-50 total) - focus on quality, not quantity
-3. Each question MUST reference specific details from candidate's background, job requirements, or company research
-4. Create variations tailored to the specific role and candidate background
-5. Create extensions that probe deeper into candidate's experiences
-6. Align questions with job responsibilities and company values
-7. Ensure questions reference specific technologies, projects, or achievements from CV
-8. Match question complexity to candidate's experience level
-9. NO GENERIC QUESTIONS: Every question must be unique and reference specific context details
+2. Generate MINIMUM 5 questions per category (target 5-8 per category for 30-50 total) - THIS IS MANDATORY
+3. If you have fewer real questions, generate MORE variations and extensions to reach the 30+ minimum
+4. Each question MUST reference specific details from candidate's background, job requirements, or company research
+5. Create variations tailored to the specific role and candidate background
+6. Create extensions that probe deeper into candidate's experiences
+7. Align questions with job responsibilities and company values
+8. Ensure questions reference specific technologies, projects, or achievements from CV
+9. Match question complexity to candidate's experience level
+10. NO GENERIC QUESTIONS: Every question must be unique and reference specific context details
+11. COUNT YOUR QUESTIONS: Before finalizing, count total questions - you MUST have at least 30 total
 
 You MUST return ONLY valid JSON in the exact structure specified - no markdown, no additional text.`;
 }
@@ -607,23 +615,310 @@ function buildSynthesisPrompt(
   // SECTION 5: SYNTHESIS INSTRUCTIONS
   // ============================================================
   prompt += `=== SYNTHESIS REQUIREMENTS ===\n`;
-  prompt += `CRITICAL: QUALITY OVER QUANTITY - Generate fewer but HIGHLY TAILORED questions\n`;
+  prompt += `CRITICAL: You MUST generate MINIMUM 30 questions total (target 30-50) - THIS IS MANDATORY\n`;
   prompt += `1. Use the REAL interview questions above as the foundation - generate tailored variations and extensions\n`;
   prompt += `2. Tailor EVERY question to the candidate's specific background (work history, projects, achievements)\n`;
   prompt += `3. Align EVERY question with the specific job responsibilities and requirements\n`;
   prompt += `4. Reference company culture, values, and interview philosophy in EVERY question\n`;
-  prompt += `5. Generate 5-8 questions per category (30-50 total) - focus on QUALITY and TAILORING\n`;
-  prompt += `6. Ensure 100% of questions reference specific company/job/CV details (NO generic questions)\n`;
-  prompt += `7. Match question complexity to ${targetSeniority || 'mid'}-level candidate\n`;
-  prompt += `8. Include rationale explaining why each question would be asked at ${company} (reference specific details)\n`;
-  prompt += `9. Provide company-specific context for each question (must include specific company information)\n`;
-  prompt += `10. Map candidate's experiences to potential STAR stories for behavioral questions\n`;
-  prompt += `11. NO GENERIC QUESTIONS: Every question must be unique and reference specific details from the context\n\n`;
+  prompt += `5. Generate MINIMUM 5 questions per category (target 5-8 per category for 30-50 total) - MANDATORY MINIMUM\n`;
+  prompt += `6. If you have fewer real questions, generate MORE variations to reach the 30+ minimum requirement\n`;
+  prompt += `7. COUNT YOUR QUESTIONS: Before finalizing JSON, ensure you have at least 30 total questions across all categories\n`;
+  prompt += `8. Ensure 100% of questions reference specific company/job/CV details (NO generic questions)\n`;
+  prompt += `9. Match question complexity to ${targetSeniority || 'mid'}-level candidate\n`;
+  prompt += `10. Include rationale explaining why each question would be asked at ${company} (reference specific details)\n`;
+  prompt += `11. Provide company-specific context for each question (must include specific company information)\n`;
+  prompt += `12. Map candidate's experiences to potential STAR stories for behavioral questions\n`;
+  prompt += `13. NO GENERIC QUESTIONS: Every question must be unique and reference specific details from the context\n\n`;
 
   prompt += `Return this exact JSON structure:\n`;
   prompt += JSON.stringify(getUnifiedSynthesisSchema(), null, 2);
 
   return prompt;
+}
+
+// ============================================================
+// ITERATIVE QUESTION GENERATION
+// Generates additional questions when initial synthesis is insufficient
+// ============================================================
+
+function countQuestions(questionsData: any): { total: number; byCategory: Record<string, number> } {
+  const byCategory: Record<string, number> = {};
+  let total = 0;
+
+  if (questionsData) {
+    Object.entries(questionsData).forEach(([category, questions]: [string, any]) => {
+      const count = Array.isArray(questions) ? questions.length : 0;
+      byCategory[category] = count;
+      total += count;
+    });
+  }
+
+  return { total, byCategory };
+}
+
+async function generateAdditionalQuestionsForCategory(
+  category: string,
+  targetCount: number,
+  existingQuestions: any[],
+  company: string,
+  role: string | undefined,
+  targetSeniority: 'junior' | 'mid' | 'senior' | undefined,
+  companyInsights: any,
+  jobRequirements: any,
+  cvAnalysis: any,
+  openaiApiKey: string
+): Promise<any[]> {
+  try {
+    console.log(`🔄 Generating ${targetCount} additional ${category} questions...`);
+
+    const model = getOpenAIModel('questionGeneration');
+    const maxTokens = getMaxTokens('questionGeneration');
+
+    // Build focused prompt for this category
+    let prompt = `Generate ${targetCount} HIGHLY TAILORED ${category} interview questions for:\n`;
+    prompt += `Company: ${company}\n`;
+    if (role) prompt += `Role: ${role}\n`;
+    if (targetSeniority) prompt += `Candidate Seniority: ${targetSeniority}\n\n`;
+
+    // Include existing questions to avoid duplicates
+    if (existingQuestions.length > 0) {
+      prompt += `EXISTING QUESTIONS (do NOT repeat these):\n`;
+      existingQuestions.forEach((q, idx) => {
+        prompt += `${idx + 1}. ${q.question || q}\n`;
+      });
+      prompt += `\n`;
+    }
+
+    // Include relevant context
+    if (companyInsights?.interview_questions_bank?.[category]?.length > 0) {
+      prompt += `REAL ${category.toUpperCase()} QUESTIONS FROM CANDIDATE REPORTS:\n`;
+      companyInsights.interview_questions_bank[category].forEach((q: string, idx: number) => {
+        prompt += `${idx + 1}. "${q}"\n`;
+      });
+      prompt += `\n`;
+    }
+
+    if (jobRequirements?.technical_skills?.length > 0) {
+      prompt += `Technical Skills Required: ${jobRequirements.technical_skills.slice(0, 10).join(', ')}\n`;
+    }
+
+    if (cvAnalysis?.aiAnalysis?.experience?.length > 0) {
+      prompt += `Candidate Experience: ${cvAnalysis.aiAnalysis.experience.slice(0, 2).map((e: any) => `${e.role} at ${e.company}`).join(', ')}\n`;
+    }
+
+    prompt += `\nREQUIREMENTS:\n`;
+    prompt += `1. Generate EXACTLY ${targetCount} new ${category} questions\n`;
+    prompt += `2. Each question MUST be unique and different from existing questions\n`;
+    prompt += `3. Questions must reference specific company, job, or candidate details\n`;
+    prompt += `4. Questions must be tailored to ${targetSeniority || 'mid'}-level candidate\n`;
+    prompt += `5. NO generic questions - every question must be specific and actionable\n\n`;
+
+    prompt += `Return ONLY a JSON object with a "questions" array:\n`;
+    prompt += `{\n  "questions": [\n    {\n      "question": "Specific tailored question",\n      "difficulty": "easy|medium|hard",\n      "rationale": "Why this question would be asked",\n      "company_context": "How it relates to ${company}",\n      "confidence_score": 0.8\n    }\n  ]\n}\n`;
+
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openaiApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model,
+        response_format: { type: "json_object" },
+        messages: [
+          {
+            role: 'system',
+            content: 'You are an expert interview question generator. Generate highly tailored, specific interview questions. Return ONLY valid JSON - no markdown, no additional text.'
+          },
+          {
+            role: 'user',
+            content: prompt
+          }
+        ],
+        max_tokens: maxTokens,
+        temperature: 0.7
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`❌ Failed to generate additional ${category} questions:`, response.status, errorText);
+      return [];
+    }
+
+    const data = await response.json();
+    const rawContent = data.choices[0].message.content;
+    
+    const { parseJsonResponse } = await import("../_shared/openai-client.ts");
+    const parsed = parseJsonResponse(rawContent, { questions: [] });
+
+    // Extract questions array
+    let questions: any[] = [];
+    if (Array.isArray(parsed)) {
+      questions = parsed;
+    } else if (parsed.questions && Array.isArray(parsed.questions)) {
+      questions = parsed.questions;
+    }
+
+    // Ensure all questions have required fields
+    questions = questions.map(q => ({
+      question: q.question || '',
+      category: category,
+      difficulty: q.difficulty || 'Medium',
+      rationale: q.rationale || '',
+      company_context: q.company_context || '',
+      confidence_score: q.confidence_score || 0.8,
+      star_story_fit: q.star_story_fit || false,
+      suggested_answer_approach: q.suggested_answer_approach || '',
+      evaluation_criteria: q.evaluation_criteria || [],
+      follow_up_questions: q.follow_up_questions || []
+    })).filter(q => q.question.trim().length > 0);
+
+    console.log(`✅ Generated ${questions.length} additional ${category} questions`);
+    return questions;
+
+  } catch (error) {
+    console.error(`❌ Error generating additional ${category} questions:`, error);
+    return [];
+  }
+}
+
+async function ensureMinimumQuestions(
+  synthesis: UnifiedSynthesisOutput,
+  company: string,
+  role: string | undefined,
+  targetSeniority: 'junior' | 'mid' | 'senior' | undefined,
+  companyInsights: any,
+  jobRequirements: any,
+  cvAnalysis: any,
+  openaiApiKey: string
+): Promise<UnifiedSynthesisOutput> {
+  const MIN_TOTAL = 30;
+  const MIN_PER_CATEGORY = 4;
+  const TARGET_PER_CATEGORY = 5;
+  const MAX_ITERATIONS = 2; // Limit iterations to avoid excessive API calls
+
+  let { total, byCategory } = countQuestions(synthesis.interview_questions_data);
+  
+  console.log(`\n📊 Question count check: ${total} total questions`);
+  console.log(`📋 Current breakdown:`, byCategory);
+
+  // If we already have enough, return early
+  if (total >= MIN_TOTAL) {
+    const allCategoriesHaveMinimum = Object.values(byCategory).every(count => count >= MIN_PER_CATEGORY);
+    if (allCategoriesHaveMinimum) {
+      console.log(`✅ Sufficient questions generated (${total} total)`);
+      return synthesis;
+    }
+  }
+
+  console.log(`\n🔄 Starting iterative question generation to reach minimum thresholds...`);
+
+  const allCategories = ['behavioral', 'technical', 'situational', 'company_specific', 'role_specific', 'experience_based', 'cultural_fit'];
+  let iteration = 0;
+
+  while (total < MIN_TOTAL && iteration < MAX_ITERATIONS) {
+    iteration++;
+    console.log(`\n📝 Iteration ${iteration}: Current total: ${total}, Target: ${MIN_TOTAL}`);
+
+    // Identify categories that need more questions
+    const categoriesToFill: Array<{ category: string; needed: number }> = [];
+    
+    allCategories.forEach(category => {
+      const currentCount = byCategory[category] || 0;
+      const target = Math.max(MIN_PER_CATEGORY, TARGET_PER_CATEGORY);
+      
+      if (currentCount < target) {
+        const needed = target - currentCount;
+        categoriesToFill.push({ category, needed });
+      }
+    });
+
+    // If total is still below minimum, prioritize categories with fewest questions
+    if (total < MIN_TOTAL) {
+      const additionalNeeded = MIN_TOTAL - total;
+      const sortedCategories = Object.entries(byCategory)
+        .sort(([, a], [, b]) => (a || 0) - (b || 0))
+        .map(([cat]) => cat);
+
+      // Distribute additional questions across categories
+      let remaining = additionalNeeded;
+      for (const category of sortedCategories) {
+        if (remaining <= 0) break;
+        
+        const currentCount = byCategory[category] || 0;
+        const needed = Math.min(3, Math.ceil(remaining / (sortedCategories.length - sortedCategories.indexOf(category))));
+        
+        const existing = categoriesToFill.find(c => c.category === category);
+        if (existing) {
+          existing.needed += needed;
+        } else {
+          categoriesToFill.push({ category, needed });
+        }
+        remaining -= needed;
+      }
+    }
+
+    // Generate additional questions for each category
+    const additionalQuestions: Record<string, any[]> = {};
+    
+    for (const { category, needed } of categoriesToFill) {
+      if (needed <= 0) continue;
+
+      const existing = Array.isArray(synthesis.interview_questions_data?.[category]) 
+        ? synthesis.interview_questions_data[category] 
+        : [];
+
+      const newQuestions = await generateAdditionalQuestionsForCategory(
+        category,
+        needed,
+        existing,
+        company,
+        role,
+        targetSeniority,
+        companyInsights,
+        jobRequirements,
+        cvAnalysis,
+        openaiApiKey
+      );
+
+      if (newQuestions.length > 0) {
+        additionalQuestions[category] = newQuestions;
+      }
+    }
+
+    // Merge additional questions with existing ones
+    const mergedQuestions = { ...synthesis.interview_questions_data };
+    
+    Object.entries(additionalQuestions).forEach(([category, questions]) => {
+      if (!mergedQuestions[category]) {
+        mergedQuestions[category] = [];
+      }
+      mergedQuestions[category] = [
+        ...(Array.isArray(mergedQuestions[category]) ? mergedQuestions[category] : []),
+        ...questions
+      ];
+    });
+
+    // Update synthesis
+    synthesis.interview_questions_data = mergedQuestions;
+    
+    // Recalculate counts
+    const newCounts = countQuestions(synthesis.interview_questions_data);
+    total = newCounts.total;
+    byCategory = newCounts.byCategory;
+
+    console.log(`✅ Iteration ${iteration} complete: ${total} total questions`);
+    console.log(`📋 Updated breakdown:`, byCategory);
+  }
+
+  if (total < MIN_TOTAL) {
+    console.warn(`⚠️ Still below minimum (${total} < ${MIN_TOTAL}) after ${iteration} iterations, but continuing with available questions`);
+  } else {
+    console.log(`✅ Reached minimum threshold: ${total} total questions`);
+  }
+
+  return synthesis;
 }
 
 function getUnifiedSynthesisSchema(): any {
@@ -795,9 +1090,12 @@ async function saveToDatabase(
     console.log("  → Saving synthesis results...");
     const synthesisSaveResult = await withDbTimeout(
       async () => {
+        // Use upsert to ensure the row exists (handles both insert and update)
         const { data, error } = await supabase
           .from('search_artifacts')
-          .update({
+          .upsert({
+            search_id: searchId,
+            user_id: userId,
             interview_stages: synthesis.interview_stages,
             synthesis_metadata: synthesis.synthesis_metadata,
             comparison_analysis: synthesis.comparison_analysis,
@@ -806,17 +1104,22 @@ async function saveToDatabase(
             processing_status: 'complete',
             processing_synthesis_end_at: new Date().toISOString(),
             processing_completed_at: new Date().toISOString()
-          })
-          .eq('search_id', searchId);
+          }, { onConflict: 'search_id' })
+          .select();
 
-        if (error) throw error;
+        if (error) {
+          console.error("❌ Synthesis save error:", error);
+          throw error;
+        }
         return data;
       },
-      'Save synthesis to search_artifacts'
+      'Save synthesis to search_artifacts',
+      45000 // Increased timeout for large data
     );
 
-    if (!synthesisSaveResult) {
-      console.warn("⚠️ Synthesis save failed, continuing...");
+    if (!synthesisSaveResult || synthesisSaveResult.length === 0) {
+      console.error("❌ Synthesis save failed - no data returned");
+      throw new Error("Failed to save synthesis results to database");
     } else {
       console.log("✅ Synthesis saved");
     }
@@ -1109,10 +1412,31 @@ serve(async (req: Request) => {
       throw new Error("Synthesis failed");
     }
 
+    // ============================================================
+    // ITERATIVE QUESTION GENERATION: Ensure minimum question count
+    // ============================================================
+    
+    console.log("\n🔍 Checking question count and generating additional questions if needed...");
+    // Use QUESTION_GENERATION_START since we're generating additional questions
+    
+    const finalSynthesis = await ensureMinimumQuestions(
+      synthesis,
+      requestData.company,
+      requestData.role,
+      requestData.targetSeniority,
+      companyInsights,
+      jobRequirements,
+      cvAnalysis,
+      openaiApiKey
+    );
+
+    const { total: finalTotal, byCategory: finalByCategory } = countQuestions(finalSynthesis.interview_questions_data);
     console.log("✅ PHASE 3 Complete");
     logger?.log("PHASE_COMPLETE", "UNIFIED_SYNTHESIS", {
-      stageCount: synthesis.interview_stages?.length || 0,
-      questionCategories: Object.keys(synthesis.interview_questions_data || {})
+      stageCount: finalSynthesis.interview_stages?.length || 0,
+      questionCategories: Object.keys(finalSynthesis.interview_questions_data || {}),
+      totalQuestions: finalTotal,
+      questionBreakdown: finalByCategory
     });
     await tracker.updateStep('AI_SYNTHESIS_COMPLETE');
 
@@ -1124,7 +1448,7 @@ serve(async (req: Request) => {
     logger?.log("PHASE_START", "DATABASE_SAVE");
     await tracker.updateStep('QUESTION_GENERATION_START');
 
-    await saveToDatabase(supabase, searchId, userId, rawData, synthesis);
+    await saveToDatabase(supabase, searchId, userId, rawData, finalSynthesis);
 
     console.log("✅ PHASE 4 Complete");
     logger?.log("PHASE_COMPLETE", "DATABASE_SAVE");
