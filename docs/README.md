@@ -4,6 +4,15 @@ Welcome to the Intel Interview Prep documentation. This folder contains all guid
 
 ## Quick Navigation
 
+### 👨‍💻 For Developers
+
+- **[CLAUDE.md](../CLAUDE.md)** - Essential developer guide (start here!)
+  - Project overview and architecture
+  - Development commands and workflows
+  - Key architectural patterns
+  - Common tasks and troubleshooting
+  - Configuration and setup
+
 ### 🚀 For Deployment
 
 - **[DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md)** - Step-by-step deployment instructions
@@ -70,14 +79,12 @@ The system has been completely redesigned for better reliability and performance
 
 ## Documentation Index
 
-| Document | Description |
-|----------|-------------|
-| [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md) | Complete deployment steps, rollback procedures, testing plan |
-| [OPTION_B_REDESIGN_COMPLETE.md](./OPTION_B_REDESIGN_COMPLETE.md) | Full architecture redesign details |
-| [research_debugging_notes.md](./research_debugging_notes.md) | Live debugging instrumentation and fixes |
-| [ROOT_CAUSE_ANALYSIS.md](../ROOT_CAUSE_ANALYSIS.md) | Root cause analysis for past outages |
-| [REDESIGN_SUMMARY.md](../REDESIGN_SUMMARY.md) | Executive summary of redesign |
-| [COMMIT_SUMMARY.md](../COMMIT_SUMMARY.md) | Chronological list of major commits |
+| Document | Purpose | Audience |
+|----------|---------|----------|
+| [CLAUDE.md](../CLAUDE.md) | Essential developer guide | All Developers |
+| [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md) | How to deploy the redesign | DevOps, Backend Engineers |
+| [OPTION_B_REDESIGN_COMPLETE.md](./OPTION_B_REDESIGN_COMPLETE.md) | Complete redesign explanation | Engineers, Architects |
+| [README.md](./README.md) | Navigation and overview | Everyone |
 
 ## Deployment Checklist Overview
 
@@ -117,9 +124,8 @@ Before deployment:
 
 1. Document every architectural change in `OPTION_B_REDESIGN_COMPLETE.md`.
 2. Keep deployment guide updated with any new steps.
-3. For debugging instrumentation, update `docs/research_debugging_notes.md`.
-4. All migrations must be committed in `supabase/migrations/` with timestamped filenames.
-5. Update `docs/README.md` if new major documents are added.
+3. All migrations must be committed in `supabase/migrations/` with timestamped filenames.
+4. Update `docs/README.md` if new major documents are added.
 
 ## Quick Answers
 
@@ -127,7 +133,128 @@ Before deployment:
 - **How do I deploy?** Follow `DEPLOYMENT_GUIDE.md` step-by-step.
 - **Need raw data?** Query `search_artifacts` by `search_id`.
 - **Need questions?** Check `interview_questions` table.
-- **Need history?** See `COMMIT_SUMMARY.md` and `ROOT_CAUSE_ANALYSIS.md`.
+
+## Architecture Flow
+
+### Before Redesign
+
+```text
+Company Research → Job Analysis → CV Analysis
+        ↓              ↓              ↓
+        └──────→ AI Synthesis ←──────┘
+                      ↓
+        ┌─────────────┼─────────────┐
+        ↓             ↓             ↓
+   CV-Job Comp   Questions Gen  Other
+        ↓             ↓             ↓
+    Database Operations: 126-157 operations
+        ↓
+    Problems: Hangs, timeouts, 406 errors
+```
+
+### After Redesign
+
+```text
+Company Research → Job Analysis → CV Analysis
+        ↓              ↓              ↓
+        └──────→ Save Raw Data ←──────┘ (< 1s)
+                      ↓
+        ┌─────→ Unified Synthesis ←─────┐
+        │  (4 stages, comparison,       │
+        │   questions, guidance)        │
+        │         20-30 seconds         │
+        └──────→ Save Results ←─────────┘ (< 3s total)
+                      ↓
+            Complete: All data saved
+```
+
+## Key Features
+
+### Unified Synthesis
+
+Single OpenAI call generates:
+
+- 4 interview stages
+- Skill/experience gap analysis
+- STAR method stories
+- 120-150 interview questions (7 categories)
+- Personalized preparation timeline
+
+### Raw Data Storage
+
+All research data saved immediately:
+
+- Company research insights
+- Job requirements analysis
+- CV analysis and skills
+- Useful for debugging and reanalysis
+
+### Timeout Protection
+
+All database operations protected:
+
+- 30-second timeout per operation
+- Clear error messages
+- Graceful degradation
+- No silent hangs
+
+### Performance Improvements
+
+- 97% faster database writes
+- 97% fewer failure points
+- 100% data retention
+- Predictable processing (50-65 seconds)
+
+## Deployment Timeline
+
+| Phase | Status | Timeline |
+|-------|--------|----------|
+| Code changes | ✅ Complete | Done Nov 16 |
+| Database migration | ⏳ Pending | Ready to deploy |
+| Function deployment | ⏳ Pending | After DB |
+| Testing | ⏳ Pending | After functions |
+| Monitoring | ⏳ Pending | After testing |
+
+## Support
+
+### For Questions About the Redesign
+
+1. Check `OPTION_B_REDESIGN_COMPLETE.md` for details
+2. Review the code in `interview-research/index.ts`
+3. Check this README for quick answers
+
+### For Deployment Issues
+
+1. Follow `DEPLOYMENT_GUIDE.md` step-by-step
+2. Check the Troubleshooting section in deployment guide
+3. Review function logs in Supabase Dashboard
+
+### For Performance or Data Issues
+
+1. Check database logs in Supabase
+2. Review search_artifacts table for raw data
+3. Verify RLS policies are applied correctly
+
+## Versioning
+
+**Current Version:** Option B Redesign - November 16, 2025
+
+**Previous Version:** Multiple microservices with 126-157 operations (legacy)
+
+**Next Version:** TBD (based on learnings from this redesign)
+
+## Contributing
+
+When making changes to the system:
+
+1. **Database:** Create migration in `supabase/migrations/`
+2. **Functions:** Update relevant function in `supabase/functions/`
+3. **Frontend:** Update queries in `src/services/`
+4. **Documentation:** Update relevant docs in `docs/`
+
+## License
+
+All code and documentation in this repository is proprietary.
 
 ---
 

@@ -64,6 +64,7 @@ A modern, AI-powered interview preparation tool that helps small circles of frie
    - Optionally add role and location details
    - Upload your CV for personalized insights
    - Click "Run Intel" and wait for AI research
+   - Note: Code Assistant can connect to Supabase via MCP and run read queries directly if you need to validate data during troubleshooting.
 
 4. **Review & Practice**
    - Explore the generated interview stages

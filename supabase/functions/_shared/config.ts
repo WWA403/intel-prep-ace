@@ -1,43 +1,48 @@
 // Centralized configuration for interview research system
 // Adjust these values to fine-tune the research process
 
+// Get model from environment variable, fallback to defaults
+const getModelFromEnv = (defaultModel: string): string => {
+  // Check for OPENAI_MODEL environment variable first
+  const envModel = Deno.env.get("OPENAI_MODEL");
+  if (envModel) {
+    return envModel;
+  }
+  return defaultModel;
+};
+
 export const RESEARCH_CONFIG = {
   // OpenAI Configuration - Flexible model selection per use case
   openai: {
-    // Default models
-    defaultModel: 'gpt-4o',
-    fallbackModel: 'gpt-4o-mini', // Used for less critical operations
+    // Default models - can be overridden via OPENAI_MODEL environment variable
+    defaultModel: getModelFromEnv('gpt-4o'),
+    fallbackModel: getModelFromEnv('gpt-4o-mini'), // Used for less critical operations
 
     // Process-specific models (can be overridden per operation)
     // Use these to control which model is used for each critical operation
+    // All models respect OPENAI_MODEL env var if set
     models: {
       // Critical processes (core interview prep) - use latest powerful model
-      companyResearch: 'gpt-4o',           // Company insights analysis
-      jobAnalysis: 'gpt-4o',               // Job requirements analysis
-      cvAnalysis: 'gpt-4o',                // CV parsing and skill extraction
-      interviewSynthesis: 'gpt-4o',        // Final synthesis of all data
-      cvJobComparison: 'gpt-4o',           // CV vs Job analysis
+      companyResearch: getModelFromEnv('gpt-4o'),           // Company insights analysis
+      jobAnalysis: getModelFromEnv('gpt-4o'),               // Job requirements analysis
+      cvAnalysis: getModelFromEnv('gpt-4o'),                // CV parsing and skill extraction
+      interviewSynthesis: getModelFromEnv('gpt-4o'),        // Final synthesis of all data
+      cvJobComparison: getModelFromEnv('gpt-4o'),           // CV vs Job analysis
 
-      // Important processes - can use balanced model
-      questionGeneration: 'gpt-4o-mini',   // Question generation (high volume, less critical)
+      // Important processes - use powerful model for quality
+      questionGeneration: getModelFromEnv('gpt-4o'),   // Question generation (upgraded for better quality and depth)
 
       // Supporting processes - can use lightweight model
-      contentSummarization: 'gpt-4o-mini', // Summarizing research content
-      contentQualityScoring: 'gpt-4o-mini', // Scoring content relevance
+      contentSummarization: getModelFromEnv('gpt-4o-mini'), // Summarizing research content
+      contentQualityScoring: getModelFromEnv('gpt-4o-mini'), // Scoring content relevance
     },
 
     maxTokens: {
       companyAnalysis: 5000,
-      interviewSynthesis: 5000,
+      interviewSynthesis: 8000,  // Increased for richer synthesis
       cvAnalysis: 3000,
-      questionGeneration: 3000,
+      questionGeneration: 6000,  // Increased for better question quality
       cvJobComparison: 4000,  // Added for CV-Job comparison
-    },
-    temperature: {
-      analysis: 0.3,      // More deterministic for factual analysis
-      synthesis: 0.5,     // More creative for personalized guidance
-      questions: 0.5,     // Balanced for question generation
-      comparison: 0.5,    // Balanced for CV-Job comparison
     },
     useJsonMode: true,    // Force JSON responses for reliability
   },
@@ -290,8 +295,24 @@ export const RESEARCH_CONFIG = {
 export const getOpenAIModel = (
   operation: keyof typeof RESEARCH_CONFIG.openai.models = 'interviewSynthesis'
 ): string => {
+  // Check environment variable first (highest priority)
+  const envModel = Deno.env.get("OPENAI_MODEL");
+  if (envModel) {
+    return envModel;
+  }
+  
+  // Fall back to operation-specific model
   const model = RESEARCH_CONFIG.openai.models[operation];
   return model || RESEARCH_CONFIG.openai.defaultModel;
+};
+
+/**
+ * Check if the model is GPT-5 series (which doesn't support temperature)
+ * @param model - The model name
+ * @returns true if model is GPT-5 series
+ */
+export const isGPT5Model = (model: string): boolean => {
+  return model.toLowerCase().includes('gpt-5') || model.toLowerCase().includes('gpt5');
 };
 
 /**
@@ -306,17 +327,6 @@ export const getMaxTokens = (
   return tokens || 3000;
 };
 
-/**
- * Get the temperature setting for a specific operation type
- * @param operationType - The type of operation (analysis, synthesis, questions, comparison)
- * @returns The temperature value for this operation
- */
-export const getTemperature = (
-  operationType: keyof typeof RESEARCH_CONFIG.openai.temperature = 'synthesis'
-): number => {
-  const temp = RESEARCH_CONFIG.openai.temperature[operationType];
-  return temp !== undefined ? temp : 0.5;
-};
 
 export const getCompanyTicker = (companyName: string): string => {
   return RESEARCH_CONFIG.search.companyTickers[companyName.toLowerCase()] || companyName.toUpperCase();

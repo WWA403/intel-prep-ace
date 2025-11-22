@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.43.2";
 import { SearchLogger } from "../_shared/logger.ts";
-import { RESEARCH_CONFIG, getOpenAIModel, getMaxTokens, getTemperature } from "../_shared/config.ts";
+import { RESEARCH_CONFIG, getOpenAIModel, getMaxTokens } from "../_shared/config.ts";
 import { ProgressTracker, PROGRESS_STEPS, CONCURRENT_TIMEOUTS, executeWithTimeout } from "../_shared/progress-tracker.ts";
 
 const corsHeaders = {
@@ -188,7 +188,10 @@ async function unifiedSynthesis(
 
     const model = getOpenAIModel('interviewSynthesis');
     const maxTokens = getMaxTokens('interviewSynthesis');
-    const temperature = getTemperature('synthesis');
+    
+    // Log which model is being used
+    console.log(`🤖 Using OpenAI model: ${model} (from ${Deno.env.get("OPENAI_MODEL") ? "OPENAI_MODEL env var" : "default config"})`);
+    console.log(`📊 Max tokens: ${maxTokens}`);
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -209,8 +212,7 @@ async function unifiedSynthesis(
             content: synthesisPrompt
           }
         ],
-        max_tokens: maxTokens,
-        temperature
+        max_tokens: maxTokens
       })
     });
 
@@ -221,9 +223,29 @@ async function unifiedSynthesis(
     }
 
     const data = await response.json();
-    const synthesisResult = JSON.parse(data.choices[0].message.content);
-
+    const rawContent = data.choices[0].message.content;
+    
+    // Use shared JSON parsing utility that handles markdown code blocks
+    const { parseJsonResponse } = await import("../_shared/openai-client.ts");
+    const synthesisResult = parseJsonResponse(rawContent, {
+      interview_stages: [],
+      comparison_analysis: {},
+      interview_questions_data: {},
+      preparation_guidance: {}
+    });
+    
+    // Log question counts
+    const questionCounts: Record<string, number> = {};
+    if (synthesisResult.interview_questions_data) {
+      Object.entries(synthesisResult.interview_questions_data).forEach(([category, questions]: [string, any]) => {
+        questionCounts[category] = Array.isArray(questions) ? questions.length : 0;
+      });
+    }
+    const totalQuestions = Object.values(questionCounts).reduce((sum, count) => sum + count, 0);
+    
     console.log("✅ Unified synthesis complete");
+    console.log(`📊 Questions generated: ${totalQuestions} total`);
+    console.log(`📋 Question breakdown:`, questionCounts);
 
     return {
       interview_stages: synthesisResult.interview_stages || [],
@@ -233,7 +255,6 @@ async function unifiedSynthesis(
       synthesis_metadata: {
         model,
         max_tokens: maxTokens,
-        temperature,
         timestamp: new Date().toISOString()
       }
     };
@@ -246,25 +267,54 @@ async function unifiedSynthesis(
 function getSynthesisSystemPrompt(): string {
   return `You are an expert interview preparation consultant with deep knowledge of hiring practices across major companies and technical roles.
 
-Your task is to create a COMPREHENSIVE, UNIFIED interview preparation guide based on company research, job requirements, and candidate profile.
+Your task is to create a COMPREHENSIVE, DEEPLY TAILORED interview preparation guide based on company research, job requirements, and candidate profile.
 
 CRITICAL REQUIREMENTS:
-1. Generate 4 realistic interview stages based on company hiring process
-2. Create a detailed CV-to-Job comparison analysis
-3. Generate 120-150 interview questions across 7 categories
-4. Provide personalized preparation guidance
+1. Generate 4 realistic interview stages based on ACTUAL company hiring process from candidate reports
+2. Create a detailed CV-to-Job comparison analysis with specific skill gaps and experience mapping
+3. Generate MINIMUM 30 questions (target 30-50) HIGHLY TAILORED interview questions across 7 categories - THIS IS MANDATORY
+4. Provide personalized preparation guidance based on candidate's specific background
 
-QUALITY REQUIREMENTS:
-- All questions must be SPECIFIC and ACTIONABLE (NO generic placeholders)
-- Interview stages must match actual company processes (use company research data)
-- Questions must reference company-specific information when available
-- Difficulty must adapt to candidate seniority level
-- All data must be grounded in provided research
+QUESTION COUNT REQUIREMENT - MANDATORY:
+- MINIMUM 30 questions total across all categories (this is a hard requirement, not a suggestion)
+- TARGET 30-50 questions total (aim for 5-8 questions per category)
+- DISTRIBUTION: Ensure at least 3-4 questions per category minimum
+- If you cannot generate 30+ questions, you MUST generate more variations and extensions of the real questions provided
+
+QUALITY REQUIREMENTS - STRICTLY ENFORCE:
+- QUALITY OVER QUANTITY: Generate 30-50 questions total, ensuring EVERY question is deeply tailored and highly relevant
+- QUESTION-FIRST APPROACH: Use the REAL interview questions provided as the foundation. Generate variations, extensions, and context-specific versions of these actual questions.
+- DEEP TAILORING: 100% of questions must reference specific details from:
+  * Candidate's work history, projects, and achievements
+  * Specific job responsibilities and requirements
+  * Company culture, values, and interview philosophy
+  * Real interview questions extracted from candidate reports
+- SPECIFICITY: All questions must be SPECIFIC and ACTIONABLE (NO generic placeholders)
+  * Instead of "Tell me about a challenge" → "Tell me about a time you optimized a system at scale, similar to what we do at [Company Name]"
+  * Instead of "Solve a coding problem" → "Design a distributed caching system for our product recommendation engine"
+- INTERVIEW STAGES: Must match ACTUAL company processes from candidate reports (not generic assumptions)
+- DIFFICULTY ADAPTATION: Questions must match candidate's seniority level in complexity, not just quantity
+- RESEARCH GROUNDING: All data must be grounded in provided research - cite specific sources when possible
 
 FORBIDDEN:
 - Generic placeholders like "coding problem", "behavioral question", "solve this"
-- Vague questions without context
-- Questions not aligned with company culture or job requirements
+- Vague questions without context or company/job/CV references
+- Questions not aligned with company culture, job requirements, or candidate background
+- Repeating the same question structure without variation
+- Ignoring the real interview questions provided as foundation
+
+QUESTION GENERATION STRATEGY:
+1. Start with REAL questions from candidate reports - use these as templates
+2. Generate MINIMUM 5 questions per category (target 5-8 per category for 30-50 total) - THIS IS MANDATORY
+3. If you have fewer real questions, generate MORE variations and extensions to reach the 30+ minimum
+4. Each question MUST reference specific details from candidate's background, job requirements, or company research
+5. Create variations tailored to the specific role and candidate background
+6. Create extensions that probe deeper into candidate's experiences
+7. Align questions with job responsibilities and company values
+8. Ensure questions reference specific technologies, projects, or achievements from CV
+9. Match question complexity to candidate's experience level
+10. NO GENERIC QUESTIONS: Every question must be unique and reference specific context details
+11. COUNT YOUR QUESTIONS: Before finalizing, count total questions - you MUST have at least 30 total
 
 You MUST return ONLY valid JSON in the exact structure specified - no markdown, no additional text.`;
 }
@@ -278,57 +328,597 @@ function buildSynthesisPrompt(
   jobRequirements: any,
   cvAnalysis: any
 ): string {
-  let prompt = `Create a comprehensive interview preparation guide for:\n`;
+  let prompt = `Create a comprehensive, deeply tailored interview preparation guide for:\n`;
   prompt += `Company: ${company}\n`;
   if (role) prompt += `Role: ${role}\n`;
   if (country) prompt += `Country: ${country}\n`;
   if (targetSeniority) prompt += `Candidate Seniority: ${targetSeniority}\n`;
   prompt += `\n`;
 
+  // ============================================================
+  // SECTION 1: REAL INTERVIEW QUESTIONS (PRIORITY #1)
+  // ============================================================
+  if (companyInsights?.interview_questions_bank) {
+    prompt += `=== REAL INTERVIEW QUESTIONS FROM CANDIDATE REPORTS ===\n`;
+    prompt += `These are ACTUAL questions asked in interviews at ${company}. Use these as the foundation for generating tailored questions.\n\n`;
+    
+    const qBank = companyInsights.interview_questions_bank;
+    if (qBank.behavioral?.length > 0) {
+      prompt += `BEHAVIORAL QUESTIONS (${qBank.behavioral.length} found):\n`;
+      qBank.behavioral.forEach((q: string, idx: number) => {
+        prompt += `${idx + 1}. "${q}"\n`;
+      });
+      prompt += `\n`;
+    }
+    
+    if (qBank.technical?.length > 0) {
+      prompt += `TECHNICAL QUESTIONS (${qBank.technical.length} found):\n`;
+      qBank.technical.forEach((q: string, idx: number) => {
+        prompt += `${idx + 1}. "${q}"\n`;
+      });
+      prompt += `\n`;
+    }
+    
+    if (qBank.situational?.length > 0) {
+      prompt += `SITUATIONAL QUESTIONS (${qBank.situational.length} found):\n`;
+      qBank.situational.forEach((q: string, idx: number) => {
+        prompt += `${idx + 1}. "${q}"\n`;
+      });
+      prompt += `\n`;
+    }
+    
+    if (qBank.company_specific?.length > 0) {
+      prompt += `COMPANY-SPECIFIC QUESTIONS (${qBank.company_specific.length} found):\n`;
+      qBank.company_specific.forEach((q: string, idx: number) => {
+        prompt += `${idx + 1}. "${q}"\n`;
+      });
+      prompt += `\n`;
+    }
+    
+    prompt += `CRITICAL: Generate variations and extensions of these real questions, tailored to the candidate's background and the specific role.\n\n`;
+  }
+
+  // ============================================================
+  // SECTION 2: DETAILED COMPANY RESEARCH
+  // ============================================================
   if (companyInsights) {
-    prompt += `COMPANY RESEARCH:\n`;
-    prompt += `Industry: ${companyInsights.industry}\n`;
-    prompt += `Culture: ${companyInsights.culture}\n`;
-    prompt += `Values: ${companyInsights.values?.join(', ')}\n`;
-    prompt += `Interview Philosophy: ${companyInsights.interview_philosophy}\n`;
+    prompt += `=== COMPANY RESEARCH & INTERVIEW INSIGHTS ===\n`;
+    prompt += `Industry: ${companyInsights.industry || 'Not specified'}\n`;
+    prompt += `Culture: ${companyInsights.culture || 'Not specified'}\n`;
+    prompt += `Values: ${companyInsights.values?.join(', ') || 'Not specified'}\n`;
+    prompt += `Interview Philosophy: ${companyInsights.interview_philosophy || 'Not specified'}\n`;
+    prompt += `Recent Hiring Trends: ${companyInsights.recent_hiring_trends || 'Not specified'}\n\n`;
+    
+    // Detailed interview stages
     if (companyInsights.interview_stages?.length > 0) {
-      prompt += `\nInterview Process (from candidate reports):\n`;
+      prompt += `INTERVIEW PROCESS (from actual candidate reports):\n`;
       companyInsights.interview_stages.forEach((stage: any) => {
-        prompt += `- Stage: ${stage.name} (${stage.duration})\n`;
-        prompt += `  Interviewer: ${stage.interviewer}\n`;
+        prompt += `\nStage ${stage.order_index}: ${stage.name}\n`;
+        prompt += `  Duration: ${stage.duration || 'Not specified'}\n`;
+        prompt += `  Interviewer: ${stage.interviewer || 'Not specified'}\n`;
+        prompt += `  What to Expect: ${stage.content || 'Not specified'}\n`;
         if (stage.common_questions?.length > 0) {
-          prompt += `  Common Questions: ${stage.common_questions.join(', ')}\n`;
+          prompt += `  Common Questions in This Stage:\n`;
+          stage.common_questions.forEach((q: string) => {
+            prompt += `    - "${q}"\n`;
+          });
+        }
+        if (stage.success_tips?.length > 0) {
+          prompt += `  Success Tips:\n`;
+          stage.success_tips.forEach((tip: string) => {
+            prompt += `    - ${tip}\n`;
+          });
+        }
+        if (stage.difficulty_level) {
+          prompt += `  Difficulty: ${stage.difficulty_level}\n`;
         }
       });
+      prompt += `\n`;
     }
-    prompt += `\n`;
+    
+    // Interview experiences
+    if (companyInsights.interview_experiences) {
+      const exp = companyInsights.interview_experiences;
+      prompt += `INTERVIEW EXPERIENCES FROM CANDIDATES:\n`;
+      if (exp.difficulty_rating) {
+        prompt += `Difficulty Rating: ${exp.difficulty_rating}\n`;
+      }
+      if (exp.process_duration) {
+        prompt += `Typical Process Duration: ${exp.process_duration}\n`;
+      }
+      if (exp.positive_feedback?.length > 0) {
+        prompt += `Positive Feedback Themes:\n`;
+        exp.positive_feedback.forEach((fb: string) => {
+          prompt += `  - ${fb}\n`;
+        });
+      }
+      if (exp.negative_feedback?.length > 0) {
+        prompt += `Common Challenges:\n`;
+        exp.negative_feedback.forEach((fb: string) => {
+          prompt += `  - ${fb}\n`;
+        });
+      }
+      if (exp.common_themes?.length > 0) {
+        prompt += `Recurring Themes:\n`;
+        exp.common_themes.forEach((theme: string) => {
+          prompt += `  - ${theme}\n`;
+        });
+      }
+      prompt += `\n`;
+    }
+    
+    // Hiring manager insights
+    if (companyInsights.hiring_manager_insights) {
+      const hm = companyInsights.hiring_manager_insights;
+      prompt += `HIRING MANAGER INSIGHTS:\n`;
+      if (hm.what_they_look_for?.length > 0) {
+        prompt += `What They Look For:\n`;
+        hm.what_they_look_for.forEach((item: string) => {
+          prompt += `  - ${item}\n`;
+        });
+      }
+      if (hm.success_factors?.length > 0) {
+        prompt += `Success Factors:\n`;
+        hm.success_factors.forEach((factor: string) => {
+          prompt += `  - ${factor}\n`;
+        });
+      }
+      if (hm.red_flags?.length > 0) {
+        prompt += `Red Flags (Avoid These):\n`;
+        hm.red_flags.forEach((flag: string) => {
+          prompt += `  - ${flag}\n`;
+        });
+      }
+      prompt += `\n`;
+    }
   }
 
+  // ============================================================
+  // SECTION 3: DETAILED JOB REQUIREMENTS
+  // ============================================================
   if (jobRequirements) {
-    prompt += `JOB REQUIREMENTS:\n`;
-    prompt += `Technical Skills: ${jobRequirements.technical_skills?.join(', ')}\n`;
-    prompt += `Soft Skills: ${jobRequirements.soft_skills?.join(', ')}\n`;
-    prompt += `Experience Level: ${jobRequirements.experience_level}\n`;
-    if (jobRequirements.responsibilities?.length > 0) {
-      prompt += `Key Responsibilities: ${jobRequirements.responsibilities.join(', ')}\n`;
+    prompt += `=== JOB REQUIREMENTS & RESPONSIBILITIES ===\n`;
+    if (jobRequirements.experience_level) {
+      prompt += `Required Experience Level: ${jobRequirements.experience_level}\n`;
     }
+    
+    if (jobRequirements.technical_skills?.length > 0) {
+      prompt += `\nTechnical Skills Required:\n`;
+      jobRequirements.technical_skills.forEach((skill: string) => {
+        prompt += `  - ${skill}\n`;
+      });
+    }
+    
+    if (jobRequirements.soft_skills?.length > 0) {
+      prompt += `\nSoft Skills Required:\n`;
+      jobRequirements.soft_skills.forEach((skill: string) => {
+        prompt += `  - ${skill}\n`;
+      });
+    }
+    
+    if (jobRequirements.responsibilities?.length > 0) {
+      prompt += `\nKey Responsibilities:\n`;
+      jobRequirements.responsibilities.forEach((resp: string) => {
+        prompt += `  - ${resp}\n`;
+      });
+    }
+    
+    if (jobRequirements.qualifications?.length > 0) {
+      prompt += `\nRequired Qualifications:\n`;
+      jobRequirements.qualifications.forEach((qual: string) => {
+        prompt += `  - ${qual}\n`;
+      });
+    }
+    
+    if (jobRequirements.nice_to_have?.length > 0) {
+      prompt += `\nNice to Have:\n`;
+      jobRequirements.nice_to_have.forEach((item: string) => {
+        prompt += `  - ${item}\n`;
+      });
+    }
+    
+    if (jobRequirements.interview_process_hints?.length > 0) {
+      prompt += `\nInterview Process Hints from Job Posting:\n`;
+      jobRequirements.interview_process_hints.forEach((hint: string) => {
+        prompt += `  - ${hint}\n`;
+      });
+    }
+    
     prompt += `\n`;
   }
 
+  // ============================================================
+  // SECTION 4: DETAILED CANDIDATE PROFILE
+  // ============================================================
   if (cvAnalysis) {
     const analysisData = cvAnalysis.aiAnalysis || cvAnalysis;
-    prompt += `CANDIDATE PROFILE:\n`;
+    prompt += `=== CANDIDATE PROFILE (TAILOR QUESTIONS TO THIS BACKGROUND) ===\n`;
     prompt += `Current Role: ${analysisData.current_role || 'Not specified'}\n`;
-    prompt += `Experience: ${analysisData.experience_years || 0} years\n`;
-    prompt += `Technical Skills: ${analysisData.skills?.technical?.join(', ') || 'Not specified'}\n`;
-    prompt += `Key Achievements: ${analysisData.key_achievements?.slice(0, 3).join(', ') || 'Not specified'}\n`;
-    prompt += `\n`;
+    prompt += `Total Experience: ${analysisData.experience_years || 0} years\n`;
+    prompt += `Target Seniority Level: ${targetSeniority || 'mid'}\n\n`;
+    
+    // Full work history
+    if (analysisData.experience?.length > 0) {
+      prompt += `WORK HISTORY:\n`;
+      analysisData.experience.forEach((exp: any, idx: number) => {
+        prompt += `${idx + 1}. ${exp.role} at ${exp.company} (${exp.duration || 'Duration not specified'})\n`;
+        if (exp.achievements?.length > 0) {
+          prompt += `   Key Achievements:\n`;
+          exp.achievements.forEach((ach: string) => {
+            prompt += `     - ${ach}\n`;
+          });
+        }
+      });
+      prompt += `\n`;
+    }
+    
+    // Technical skills breakdown
+    if (analysisData.skills) {
+      if (analysisData.skills.technical?.length > 0) {
+        prompt += `TECHNICAL SKILLS:\n`;
+        analysisData.skills.technical.forEach((skill: string) => {
+          prompt += `  - ${skill}\n`;
+        });
+        prompt += `\n`;
+      }
+      
+      if (analysisData.skills.soft?.length > 0) {
+        prompt += `SOFT SKILLS:\n`;
+        analysisData.skills.soft.forEach((skill: string) => {
+          prompt += `  - ${skill}\n`;
+        });
+        prompt += `\n`;
+      }
+      
+      if (analysisData.skills.certifications?.length > 0) {
+        prompt += `CERTIFICATIONS:\n`;
+        analysisData.skills.certifications.forEach((cert: string) => {
+          prompt += `  - ${cert}\n`;
+        });
+        prompt += `\n`;
+      }
+    }
+    
+    // Projects
+    if (analysisData.projects?.length > 0) {
+      prompt += `NOTABLE PROJECTS:\n`;
+      analysisData.projects.forEach((project: string, idx: number) => {
+        prompt += `${idx + 1}. ${project}\n`;
+      });
+      prompt += `\n`;
+    }
+    
+    // Key achievements
+    if (analysisData.key_achievements?.length > 0) {
+      prompt += `KEY ACHIEVEMENTS:\n`;
+      analysisData.key_achievements.forEach((ach: string, idx: number) => {
+        prompt += `${idx + 1}. ${ach}\n`;
+      });
+      prompt += `\n`;
+    }
+    
+    // Education
+    if (analysisData.education) {
+      prompt += `EDUCATION:\n`;
+      prompt += `  Degree: ${analysisData.education.degree || 'Not specified'}\n`;
+      prompt += `  Institution: ${analysisData.education.institution || 'Not specified'}\n`;
+      if (analysisData.education.graduation_year) {
+        prompt += `  Graduation Year: ${analysisData.education.graduation_year}\n`;
+      }
+      prompt += `\n`;
+    }
+    
+    prompt += `CRITICAL: Generate questions that reference specific experiences, projects, and achievements from this candidate's background.\n\n`;
   }
+
+  // ============================================================
+  // SECTION 5: SYNTHESIS INSTRUCTIONS
+  // ============================================================
+  prompt += `=== SYNTHESIS REQUIREMENTS ===\n`;
+  prompt += `CRITICAL: You MUST generate MINIMUM 30 questions total (target 30-50) - THIS IS MANDATORY\n`;
+  prompt += `1. Use the REAL interview questions above as the foundation - generate tailored variations and extensions\n`;
+  prompt += `2. Tailor EVERY question to the candidate's specific background (work history, projects, achievements)\n`;
+  prompt += `3. Align EVERY question with the specific job responsibilities and requirements\n`;
+  prompt += `4. Reference company culture, values, and interview philosophy in EVERY question\n`;
+  prompt += `5. Generate MINIMUM 5 questions per category (target 5-8 per category for 30-50 total) - MANDATORY MINIMUM\n`;
+  prompt += `6. If you have fewer real questions, generate MORE variations to reach the 30+ minimum requirement\n`;
+  prompt += `7. COUNT YOUR QUESTIONS: Before finalizing JSON, ensure you have at least 30 total questions across all categories\n`;
+  prompt += `8. Ensure 100% of questions reference specific company/job/CV details (NO generic questions)\n`;
+  prompt += `9. Match question complexity to ${targetSeniority || 'mid'}-level candidate\n`;
+  prompt += `10. Include rationale explaining why each question would be asked at ${company} (reference specific details)\n`;
+  prompt += `11. Provide company-specific context for each question (must include specific company information)\n`;
+  prompt += `12. Map candidate's experiences to potential STAR stories for behavioral questions\n`;
+  prompt += `13. NO GENERIC QUESTIONS: Every question must be unique and reference specific details from the context\n\n`;
 
   prompt += `Return this exact JSON structure:\n`;
   prompt += JSON.stringify(getUnifiedSynthesisSchema(), null, 2);
 
   return prompt;
+}
+
+// ============================================================
+// ITERATIVE QUESTION GENERATION
+// Generates additional questions when initial synthesis is insufficient
+// ============================================================
+
+function countQuestions(questionsData: any): { total: number; byCategory: Record<string, number> } {
+  const byCategory: Record<string, number> = {};
+  let total = 0;
+
+  if (questionsData) {
+    Object.entries(questionsData).forEach(([category, questions]: [string, any]) => {
+      const count = Array.isArray(questions) ? questions.length : 0;
+      byCategory[category] = count;
+      total += count;
+    });
+  }
+
+  return { total, byCategory };
+}
+
+async function generateAdditionalQuestionsForCategory(
+  category: string,
+  targetCount: number,
+  existingQuestions: any[],
+  company: string,
+  role: string | undefined,
+  targetSeniority: 'junior' | 'mid' | 'senior' | undefined,
+  companyInsights: any,
+  jobRequirements: any,
+  cvAnalysis: any,
+  openaiApiKey: string
+): Promise<any[]> {
+  try {
+    console.log(`🔄 Generating ${targetCount} additional ${category} questions...`);
+
+    const model = getOpenAIModel('questionGeneration');
+    const maxTokens = getMaxTokens('questionGeneration');
+
+    // Build focused prompt for this category
+    let prompt = `Generate ${targetCount} HIGHLY TAILORED ${category} interview questions for:\n`;
+    prompt += `Company: ${company}\n`;
+    if (role) prompt += `Role: ${role}\n`;
+    if (targetSeniority) prompt += `Candidate Seniority: ${targetSeniority}\n\n`;
+
+    // Include existing questions to avoid duplicates
+    if (existingQuestions.length > 0) {
+      prompt += `EXISTING QUESTIONS (do NOT repeat these):\n`;
+      existingQuestions.forEach((q, idx) => {
+        prompt += `${idx + 1}. ${q.question || q}\n`;
+      });
+      prompt += `\n`;
+    }
+
+    // Include relevant context
+    if (companyInsights?.interview_questions_bank?.[category]?.length > 0) {
+      prompt += `REAL ${category.toUpperCase()} QUESTIONS FROM CANDIDATE REPORTS:\n`;
+      companyInsights.interview_questions_bank[category].forEach((q: string, idx: number) => {
+        prompt += `${idx + 1}. "${q}"\n`;
+      });
+      prompt += `\n`;
+    }
+
+    if (jobRequirements?.technical_skills?.length > 0) {
+      prompt += `Technical Skills Required: ${jobRequirements.technical_skills.slice(0, 10).join(', ')}\n`;
+    }
+
+    if (cvAnalysis?.aiAnalysis?.experience?.length > 0) {
+      prompt += `Candidate Experience: ${cvAnalysis.aiAnalysis.experience.slice(0, 2).map((e: any) => `${e.role} at ${e.company}`).join(', ')}\n`;
+    }
+
+    prompt += `\nREQUIREMENTS:\n`;
+    prompt += `1. Generate EXACTLY ${targetCount} new ${category} questions\n`;
+    prompt += `2. Each question MUST be unique and different from existing questions\n`;
+    prompt += `3. Questions must reference specific company, job, or candidate details\n`;
+    prompt += `4. Questions must be tailored to ${targetSeniority || 'mid'}-level candidate\n`;
+    prompt += `5. NO generic questions - every question must be specific and actionable\n\n`;
+
+    prompt += `Return ONLY a JSON object with a "questions" array:\n`;
+    prompt += `{\n  "questions": [\n    {\n      "question": "Specific tailored question",\n      "difficulty": "easy|medium|hard",\n      "rationale": "Why this question would be asked",\n      "company_context": "How it relates to ${company}",\n      "confidence_score": 0.8\n    }\n  ]\n}\n`;
+
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openaiApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model,
+        response_format: { type: "json_object" },
+        messages: [
+          {
+            role: 'system',
+            content: 'You are an expert interview question generator. Generate highly tailored, specific interview questions. Return ONLY valid JSON - no markdown, no additional text.'
+          },
+          {
+            role: 'user',
+            content: prompt
+          }
+        ],
+        max_tokens: maxTokens,
+        temperature: 0.7
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`❌ Failed to generate additional ${category} questions:`, response.status, errorText);
+      return [];
+    }
+
+    const data = await response.json();
+    const rawContent = data.choices[0].message.content;
+    
+    const { parseJsonResponse } = await import("../_shared/openai-client.ts");
+    const parsed = parseJsonResponse(rawContent, { questions: [] });
+
+    // Extract questions array
+    let questions: any[] = [];
+    if (Array.isArray(parsed)) {
+      questions = parsed;
+    } else if (parsed.questions && Array.isArray(parsed.questions)) {
+      questions = parsed.questions;
+    }
+
+    // Ensure all questions have required fields
+    questions = questions.map(q => ({
+      question: q.question || '',
+      category: category,
+      difficulty: q.difficulty || 'Medium',
+      rationale: q.rationale || '',
+      company_context: q.company_context || '',
+      confidence_score: q.confidence_score || 0.8,
+      star_story_fit: q.star_story_fit || false,
+      suggested_answer_approach: q.suggested_answer_approach || '',
+      evaluation_criteria: q.evaluation_criteria || [],
+      follow_up_questions: q.follow_up_questions || []
+    })).filter(q => q.question.trim().length > 0);
+
+    console.log(`✅ Generated ${questions.length} additional ${category} questions`);
+    return questions;
+
+  } catch (error) {
+    console.error(`❌ Error generating additional ${category} questions:`, error);
+    return [];
+  }
+}
+
+async function ensureMinimumQuestions(
+  synthesis: UnifiedSynthesisOutput,
+  company: string,
+  role: string | undefined,
+  targetSeniority: 'junior' | 'mid' | 'senior' | undefined,
+  companyInsights: any,
+  jobRequirements: any,
+  cvAnalysis: any,
+  openaiApiKey: string
+): Promise<UnifiedSynthesisOutput> {
+  const MIN_TOTAL = 30;
+  const MIN_PER_CATEGORY = 4;
+  const TARGET_PER_CATEGORY = 5;
+  const MAX_ITERATIONS = 2; // Limit iterations to avoid excessive API calls
+
+  let { total, byCategory } = countQuestions(synthesis.interview_questions_data);
+  
+  console.log(`\n📊 Question count check: ${total} total questions`);
+  console.log(`📋 Current breakdown:`, byCategory);
+
+  // If we already have enough, return early
+  if (total >= MIN_TOTAL) {
+    const allCategoriesHaveMinimum = Object.values(byCategory).every(count => count >= MIN_PER_CATEGORY);
+    if (allCategoriesHaveMinimum) {
+      console.log(`✅ Sufficient questions generated (${total} total)`);
+      return synthesis;
+    }
+  }
+
+  console.log(`\n🔄 Starting iterative question generation to reach minimum thresholds...`);
+
+  const allCategories = ['behavioral', 'technical', 'situational', 'company_specific', 'role_specific', 'experience_based', 'cultural_fit'];
+  let iteration = 0;
+
+  while (total < MIN_TOTAL && iteration < MAX_ITERATIONS) {
+    iteration++;
+    console.log(`\n📝 Iteration ${iteration}: Current total: ${total}, Target: ${MIN_TOTAL}`);
+
+    // Identify categories that need more questions
+    const categoriesToFill: Array<{ category: string; needed: number }> = [];
+    
+    allCategories.forEach(category => {
+      const currentCount = byCategory[category] || 0;
+      const target = Math.max(MIN_PER_CATEGORY, TARGET_PER_CATEGORY);
+      
+      if (currentCount < target) {
+        const needed = target - currentCount;
+        categoriesToFill.push({ category, needed });
+      }
+    });
+
+    // If total is still below minimum, prioritize categories with fewest questions
+    if (total < MIN_TOTAL) {
+      const additionalNeeded = MIN_TOTAL - total;
+      const sortedCategories = Object.entries(byCategory)
+        .sort(([, a], [, b]) => (a || 0) - (b || 0))
+        .map(([cat]) => cat);
+
+      // Distribute additional questions across categories
+      let remaining = additionalNeeded;
+      for (const category of sortedCategories) {
+        if (remaining <= 0) break;
+        
+        const currentCount = byCategory[category] || 0;
+        const needed = Math.min(3, Math.ceil(remaining / (sortedCategories.length - sortedCategories.indexOf(category))));
+        
+        const existing = categoriesToFill.find(c => c.category === category);
+        if (existing) {
+          existing.needed += needed;
+        } else {
+          categoriesToFill.push({ category, needed });
+        }
+        remaining -= needed;
+      }
+    }
+
+    // Generate additional questions for each category
+    const additionalQuestions: Record<string, any[]> = {};
+    
+    for (const { category, needed } of categoriesToFill) {
+      if (needed <= 0) continue;
+
+      const existing = Array.isArray(synthesis.interview_questions_data?.[category]) 
+        ? synthesis.interview_questions_data[category] 
+        : [];
+
+      const newQuestions = await generateAdditionalQuestionsForCategory(
+        category,
+        needed,
+        existing,
+        company,
+        role,
+        targetSeniority,
+        companyInsights,
+        jobRequirements,
+        cvAnalysis,
+        openaiApiKey
+      );
+
+      if (newQuestions.length > 0) {
+        additionalQuestions[category] = newQuestions;
+      }
+    }
+
+    // Merge additional questions with existing ones
+    const mergedQuestions = { ...synthesis.interview_questions_data };
+    
+    Object.entries(additionalQuestions).forEach(([category, questions]) => {
+      if (!mergedQuestions[category]) {
+        mergedQuestions[category] = [];
+      }
+      mergedQuestions[category] = [
+        ...(Array.isArray(mergedQuestions[category]) ? mergedQuestions[category] : []),
+        ...questions
+      ];
+    });
+
+    // Update synthesis
+    synthesis.interview_questions_data = mergedQuestions;
+    
+    // Recalculate counts
+    const newCounts = countQuestions(synthesis.interview_questions_data);
+    total = newCounts.total;
+    byCategory = newCounts.byCategory;
+
+    console.log(`✅ Iteration ${iteration} complete: ${total} total questions`);
+    console.log(`📋 Updated breakdown:`, byCategory);
+  }
+
+  if (total < MIN_TOTAL) {
+    console.warn(`⚠️ Still below minimum (${total} < ${MIN_TOTAL}) after ${iteration} iterations, but continuing with available questions`);
+  } else {
+    console.log(`✅ Reached minimum threshold: ${total} total questions`);
+  }
+
+  return synthesis;
 }
 
 function getUnifiedSynthesisSchema(): any {
@@ -434,7 +1024,7 @@ async function withDbTimeout<T>(
     return await Promise.race([operation(), timeoutPromise as Promise<T>]);
   } catch (error) {
     console.error(`❌ DB operation failed (${label}):`, error);
-    return null;
+    throw error;
   }
 }
 
@@ -500,9 +1090,12 @@ async function saveToDatabase(
     console.log("  → Saving synthesis results...");
     const synthesisSaveResult = await withDbTimeout(
       async () => {
+        // Use upsert to ensure the row exists (handles both insert and update)
         const { data, error } = await supabase
           .from('search_artifacts')
-          .update({
+          .upsert({
+            search_id: searchId,
+            user_id: userId,
             interview_stages: synthesis.interview_stages,
             synthesis_metadata: synthesis.synthesis_metadata,
             comparison_analysis: synthesis.comparison_analysis,
@@ -511,24 +1104,29 @@ async function saveToDatabase(
             processing_status: 'complete',
             processing_synthesis_end_at: new Date().toISOString(),
             processing_completed_at: new Date().toISOString()
-          })
-          .eq('search_id', searchId);
+          }, { onConflict: 'search_id' })
+          .select();
 
-        if (error) throw error;
+        if (error) {
+          console.error("❌ Synthesis save error:", error);
+          throw error;
+        }
         return data;
       },
-      'Save synthesis to search_artifacts'
+      'Save synthesis to search_artifacts',
+      45000 // Increased timeout for large data
     );
 
-    if (!synthesisSaveResult) {
-      console.warn("⚠️ Synthesis save failed, continuing...");
+    if (!synthesisSaveResult || synthesisSaveResult.length === 0) {
+      console.error("❌ Synthesis save failed - no data returned");
+      throw new Error("Failed to save synthesis results to database");
     } else {
       console.log("✅ Synthesis saved");
     }
 
     // CHECKPOINT 3: Insert interview stages for UI display
     console.log("  → Saving interview stages...");
-    await withDbTimeout(
+    const stageRecords = await withDbTimeout(
       async () => {
         const stagesToInsert = (synthesis.interview_stages || []).map((stage: any, index: number) => ({
           search_id: searchId,
@@ -543,11 +1141,12 @@ async function saveToDatabase(
           red_flags_to_avoid: stage.red_flags_to_avoid || []
         }));
 
-        if (stagesToInsert.length === 0) return null;
+        if (stagesToInsert.length === 0) return [];
 
         const { data, error } = await supabase
           .from('interview_stages')
-          .insert(stagesToInsert);
+          .insert(stagesToInsert)
+          .select();
 
         if (error) throw error;
         return data;
@@ -555,24 +1154,74 @@ async function saveToDatabase(
       'Insert interview stages'
     );
 
-    console.log("✅ Interview stages saved");
+    const stageIdByOrder: Record<number, string> = {};
+    (stageRecords || []).forEach((stage: any) => {
+      if (stage.order_index) stageIdByOrder[stage.order_index] = stage.id;
+    });
+
+    console.log(`✅ Interview stages saved (${(stageRecords || []).length})`);
 
     // CHECKPOINT 4: Insert interview questions
     console.log("  → Saving interview questions...");
+    
+    // Calculate total questions count before insertion
+    let totalQuestionsCount = 0;
+    if (synthesis.interview_questions_data) {
+      Object.values(synthesis.interview_questions_data).forEach((questions: any) => {
+        if (Array.isArray(questions)) {
+          totalQuestionsCount += questions.length;
+        }
+      });
+    }
+    
     await withDbTimeout(
       async () => {
+        if (!stageRecords || stageRecords.length === 0) {
+          throw new Error("No interview stages were inserted; cannot attach questions");
+        }
+
         const questionsToInsert: any[] = [];
 
+        const getStageIdForCategory = (category: string) => {
+          if (stageIdByOrder[1] && ['behavioral', 'cultural_fit'].includes(category)) return stageIdByOrder[1];
+          if (stageIdByOrder[2] && ['technical', 'role_specific'].includes(category)) return stageIdByOrder[2];
+          if (stageIdByOrder[3] && ['situational', 'experience_based'].includes(category)) return stageIdByOrder[3];
+          if (stageIdByOrder[4]) return stageIdByOrder[4];
+          return Object.values(stageIdByOrder)[0] || null;
+        };
+
+        const normalizeDifficulty = (difficulty?: string) => {
+          if (!difficulty) return 'Medium';
+          const d = difficulty.toLowerCase();
+          if (d === 'easy' || d === 'medium' || d === 'hard') {
+            return d.charAt(0).toUpperCase() + d.slice(1);
+          }
+          return 'Medium';
+        };
+
         if (synthesis.interview_questions_data) {
+          // Log question counts before inserting
+          const questionCounts: Record<string, number> = {};
+          Object.entries(synthesis.interview_questions_data).forEach(([category, questions]: [string, any]) => {
+            questionCounts[category] = Array.isArray(questions) ? questions.length : 0;
+          });
+          const totalQuestions = Object.values(questionCounts).reduce((sum, count) => sum + count, 0);
+          console.log(`📝 Preparing to insert ${totalQuestions} questions:`, questionCounts);
+          
           Object.entries(synthesis.interview_questions_data).forEach(([category, questions]: [string, any]) => {
             if (Array.isArray(questions)) {
               questions.forEach((q: any) => {
+                const stageId = getStageIdForCategory(category);
+                if (!stageId) {
+                  throw new Error(`Missing stage_id when inserting questions for category ${category}`);
+                }
                 questionsToInsert.push({
                   search_id: searchId,
+                  stage_id: stageId,
                   question: q.question,
                   category: category,
                   question_type: 'synthesized',
-                  difficulty: q.difficulty || 'medium',
+                  difficulty: normalizeDifficulty(q.difficulty),
                   rationale: q.rationale || '',
                   suggested_answer_approach: q.suggested_answer_approach || '',
                   evaluation_criteria: q.evaluation_criteria || [],
@@ -598,7 +1247,10 @@ async function saveToDatabase(
       'Insert interview questions'
     );
 
-    console.log(`✅ Interview questions saved (${Object.values(synthesis.interview_questions_data || {}).flat().length} questions)`);
+    console.log(`✅ Interview questions saved: ${totalQuestionsCount} questions`);
+    if (totalQuestionsCount < 20) {
+      console.warn(`⚠️ WARNING: Only ${totalQuestionsCount} questions were saved. Expected 30-50 questions.`);
+    }
 
     // CHECKPOINT 5: Update search status
     console.log("  → Updating search status...");
@@ -760,10 +1412,31 @@ serve(async (req: Request) => {
       throw new Error("Synthesis failed");
     }
 
+    // ============================================================
+    // ITERATIVE QUESTION GENERATION: Ensure minimum question count
+    // ============================================================
+    
+    console.log("\n🔍 Checking question count and generating additional questions if needed...");
+    await tracker.updateStep('QUESTION_VALIDATION_START');
+    
+    const finalSynthesis = await ensureMinimumQuestions(
+      synthesis,
+      requestData.company,
+      requestData.role,
+      requestData.targetSeniority,
+      companyInsights,
+      jobRequirements,
+      cvAnalysis,
+      openaiApiKey
+    );
+
+    const { total: finalTotal, byCategory: finalByCategory } = countQuestions(finalSynthesis.interview_questions_data);
     console.log("✅ PHASE 3 Complete");
     logger?.log("PHASE_COMPLETE", "UNIFIED_SYNTHESIS", {
-      stageCount: synthesis.interview_stages?.length || 0,
-      questionCategories: Object.keys(synthesis.interview_questions_data || {})
+      stageCount: finalSynthesis.interview_stages?.length || 0,
+      questionCategories: Object.keys(finalSynthesis.interview_questions_data || {}),
+      totalQuestions: finalTotal,
+      questionBreakdown: finalByCategory
     });
     await tracker.updateStep('AI_SYNTHESIS_COMPLETE');
 
@@ -775,7 +1448,7 @@ serve(async (req: Request) => {
     logger?.log("PHASE_START", "DATABASE_SAVE");
     await tracker.updateStep('QUESTION_GENERATION_START');
 
-    await saveToDatabase(supabase, searchId, userId, rawData, synthesis);
+    await saveToDatabase(supabase, searchId, userId, rawData, finalSynthesis);
 
     console.log("✅ PHASE 4 Complete");
     logger?.log("PHASE_COMPLETE", "DATABASE_SAVE");

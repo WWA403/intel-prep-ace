@@ -6,7 +6,7 @@
 DROP TABLE IF EXISTS public.cv_job_comparisons CASCADE;
 
 -- Create search_artifacts table: stores raw data + all synthesis results
-CREATE TABLE public.search_artifacts (
+CREATE TABLE IF NOT EXISTS public.search_artifacts (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   search_id UUID NOT NULL REFERENCES public.searches(id) ON DELETE CASCADE,
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -60,22 +60,29 @@ CREATE TABLE public.search_artifacts (
 -- ============================================================
 
 -- Fast lookup by search
-CREATE INDEX idx_search_artifacts_search_id ON public.search_artifacts(search_id);
+CREATE INDEX IF NOT EXISTS idx_search_artifacts_search_id ON public.search_artifacts(search_id);
 
 -- Fast lookup by user
-CREATE INDEX idx_search_artifacts_user_id ON public.search_artifacts(user_id);
+CREATE INDEX IF NOT EXISTS idx_search_artifacts_user_id ON public.search_artifacts(user_id);
 
 -- Fast lookup by status
-CREATE INDEX idx_search_artifacts_status ON public.search_artifacts(processing_status);
+CREATE INDEX IF NOT EXISTS idx_search_artifacts_status ON public.search_artifacts(processing_status);
 
 -- Composite index for user's active searches
-CREATE INDEX idx_search_artifacts_user_status ON public.search_artifacts(user_id, processing_status);
+CREATE INDEX IF NOT EXISTS idx_search_artifacts_user_status ON public.search_artifacts(user_id, processing_status);
 
 -- ============================================================
 -- ROW LEVEL SECURITY
 -- ============================================================
 
 ALTER TABLE public.search_artifacts ENABLE ROW LEVEL SECURITY;
+
+-- Clean existing policies to avoid duplicates on re-run
+DROP POLICY IF EXISTS "Users can view their own search artifacts" ON public.search_artifacts;
+DROP POLICY IF EXISTS "Users can create search artifacts" ON public.search_artifacts;
+DROP POLICY IF EXISTS "Users can update their own search artifacts" ON public.search_artifacts;
+DROP POLICY IF EXISTS "Users can delete their own search artifacts" ON public.search_artifacts;
+DROP POLICY IF EXISTS "Service role can access search artifacts" ON public.search_artifacts;
 
 -- Users can only see their own search artifacts
 CREATE POLICY "Users can view their own search artifacts"

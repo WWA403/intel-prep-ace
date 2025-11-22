@@ -6,7 +6,6 @@ export interface OpenAIRequest {
   prompt: string;
   systemPrompt: string;
   maxTokens: number;
-  temperature?: number;
   useJsonMode?: boolean;
 }
 
@@ -32,7 +31,6 @@ export async function callOpenAI(
       }
     ],
     max_tokens: request.maxTokens,
-    temperature: request.temperature || 0.3,
   };
 
   // Add JSON mode if requested (default from config)
@@ -62,9 +60,34 @@ export async function callOpenAI(
   };
 }
 
+/**
+ * Strip markdown code blocks from JSON response
+ * Handles cases where AI returns ```json ... ``` or ``` ... ```
+ */
+function stripMarkdownCodeBlocks(content: string): string {
+  // Remove markdown code blocks (```json ... ``` or ``` ... ```)
+  let cleaned = content.trim();
+  
+  // Remove opening ```json or ```
+  if (cleaned.startsWith('```json')) {
+    cleaned = cleaned.substring(7).trim();
+  } else if (cleaned.startsWith('```')) {
+    cleaned = cleaned.substring(3).trim();
+  }
+  
+  // Remove closing ```
+  if (cleaned.endsWith('```')) {
+    cleaned = cleaned.substring(0, cleaned.length - 3).trim();
+  }
+  
+  return cleaned;
+}
+
 export function parseJsonResponse<T>(content: string, fallback: T): T {
   try {
-    return JSON.parse(content);
+    // Strip markdown code blocks if present
+    const cleaned = stripMarkdownCodeBlocks(content);
+    return JSON.parse(cleaned);
   } catch (parseError) {
     console.error("Failed to parse OpenAI JSON response:", parseError);
     console.error("Raw response:", content);

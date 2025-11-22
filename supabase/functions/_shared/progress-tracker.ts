@@ -19,6 +19,7 @@ export const PROGRESS_STEPS = {
   DATA_GATHERING_COMPLETE: { step: 'Research data gathered', percentage: 35 },
   AI_SYNTHESIS_START: { step: 'Synthesizing interview preparation...', percentage: 40 },
   AI_SYNTHESIS_COMPLETE: { step: 'Synthesis complete', percentage: 70 },
+  QUESTION_VALIDATION_START: { step: 'Validating question count...', percentage: 72 },
   // Legacy phases (kept for backward compatibility)
   COMPANY_RESEARCH_START: { step: 'Analyzing company background...', percentage: 15 },
   COMPANY_RESEARCH_COMPLETE: { step: 'Company research completed', percentage: 30 },

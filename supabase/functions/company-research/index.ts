@@ -434,7 +434,6 @@ You MUST return ONLY valid JSON in this exact structure:
 }`,
     prompt: `Analyze this company research data and extract structured insights based on REAL candidate experiences:\n\n${researchContext}`,
     maxTokens: RESEARCH_CONFIG.openai.maxTokens.companyAnalysis,
-    temperature: RESEARCH_CONFIG.openai.temperature.analysis,
     useJsonMode: RESEARCH_CONFIG.openai.useJsonMode
   };
 

@@ -136,13 +136,17 @@ export class SearchLogger {
 
   async saveToFile(): Promise<void> {
     try {
-      // Create logs directory if it doesn't exist
-      const logsDir = './logs';
-      try {
-        await Deno.stat(logsDir);
-      } catch {
-        await Deno.mkdir(logsDir, { recursive: true });
-      }
+      // In edge functions, file system access is limited
+      // Skip file saving in production - logs are already in console
+      // This is only useful for local development
+      if (Deno.env.get("DENO_ENV") === "development" || Deno.env.get("ENABLE_FILE_LOGGING") === "true") {
+        // Create logs directory if it doesn't exist
+        const logsDir = './logs';
+        try {
+          await Deno.stat(logsDir);
+        } catch {
+          await Deno.mkdir(logsDir, { recursive: true });
+        }
 
       // Save detailed log file
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -175,9 +179,16 @@ export class SearchLogger {
           log.operation.includes('PHASE_TRANSITION')
         )
       }, null, 2));
-      
+      } else {
+        // In production, just log that file logging is skipped
+        console.log('📝 File logging skipped (edge function environment)');
+      }
     } catch (error) {
-      console.error('Failed to save logs to file:', error);
+      // Silently fail - file logging is optional
+      // Only log if it's a development environment
+      if (Deno.env.get("DENO_ENV") === "development") {
+        console.error('Failed to save logs to file:', error);
+      }
     }
   }
 
