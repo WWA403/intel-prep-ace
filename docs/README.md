@@ -4,6 +4,15 @@ Welcome to the Intel Interview Prep documentation. This folder contains all guid
 
 ## Quick Navigation
 
+### 👨‍💻 For Developers
+
+- **[CLAUDE.md](../CLAUDE.md)** - Essential developer guide (start here!)
+  - Project overview and architecture
+  - Development commands and workflows
+  - Key architectural patterns
+  - Common tasks and troubleshooting
+  - Configuration and setup
+
 ### 🚀 For Deployment
 
 - **[DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md)** - Step-by-step deployment instructions
@@ -96,6 +105,7 @@ The system has been completely redesigned for better reliability and performance
 
 | Document | Purpose | Audience |
 |----------|---------|----------|
+| [CLAUDE.md](../CLAUDE.md) | Essential developer guide | All Developers |
 | [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md) | How to deploy the redesign | DevOps, Backend Engineers |
 | [OPTION_B_REDESIGN_COMPLETE.md](./OPTION_B_REDESIGN_COMPLETE.md) | Complete redesign explanation | Engineers, Architects |
 | [README.md](./README.md) | Navigation and overview | Everyone |
@@ -108,10 +118,6 @@ The system has been completely redesigned for better reliability and performance
   - Old: 1285 lines, multiple operations
   - New: 789 lines, unified synthesis
   - **Status:** ✅ Complete and tested
-
-- **`supabase/functions/interview-research/index.ts.backup`** - Original code
-  - Keep for reference or rollback
-  - **Status:** ✅ Backed up
 
 ### Database Changes
 
@@ -132,7 +138,7 @@ The system has been completely redesigned for better reliability and performance
 
 ### Before Redesign
 
-```
+```text
 Company Research → Job Analysis → CV Analysis
         ↓              ↓              ↓
         └──────→ AI Synthesis ←──────┘
@@ -148,7 +154,7 @@ Company Research → Job Analysis → CV Analysis
 
 ### After Redesign
 
-```
+```text
 Company Research → Job Analysis → CV Analysis
         ↓              ↓              ↓
         └──────→ Save Raw Data ←──────┘ (< 1s)
@@ -167,6 +173,7 @@ Company Research → Job Analysis → CV Analysis
 ### Unified Synthesis
 
 Single OpenAI call generates:
+
 - 4 interview stages
 - Skill/experience gap analysis
 - STAR method stories
@@ -176,6 +183,7 @@ Single OpenAI call generates:
 ### Raw Data Storage
 
 All research data saved immediately:
+
 - Company research insights
 - Job requirements analysis
 - CV analysis and skills
@@ -184,6 +192,7 @@ All research data saved immediately:
 ### Timeout Protection
 
 All database operations protected:
+
 - 30-second timeout per operation
 - Clear error messages
 - Graceful degradation

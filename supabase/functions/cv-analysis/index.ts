@@ -172,27 +172,23 @@ ${cvText}`
   const data = await response.json();
   const analysisText = data.choices[0].message.content;
 
-  try {
-    return JSON.parse(analysisText);
-  } catch (parseError) {
-    console.error("Failed to parse CV analysis JSON:", parseError);
-    console.error("Raw response:", analysisText);
-    
-    // Return fallback structure
-    return {
-      name: "Unable to parse",
-      email: "",
-      phone: "",
-      location: "",
-      current_role: "",
-      experience_years: 0,
-      skills: { technical: [], soft: [], certifications: [] },
-      education: { degree: "", institution: "", graduation_year: new Date().getFullYear() },
-      experience: [],
-      projects: [],
-      key_achievements: []
-    };
-  }
+  // Use shared JSON parsing utility that handles markdown code blocks
+  const { parseJsonResponse } = await import("../_shared/openai-client.ts");
+  const fallback: CVAnalysis = {
+    name: "Unable to parse",
+    email: "",
+    phone: "",
+    location: "",
+    current_role: "",
+    experience_years: 0,
+    skills: { technical: [], soft: [], certifications: [] },
+    education: { degree: "", institution: "", graduation_year: new Date().getFullYear() },
+    experience: [],
+    projects: [],
+    key_achievements: []
+  };
+  
+  return parseJsonResponse(analysisText, fallback);
 }
 
 // Convert OpenAI CV analysis to Profile component format

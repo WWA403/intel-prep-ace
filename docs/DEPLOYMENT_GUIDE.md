@@ -269,14 +269,7 @@ npm run functions:deploy
 
 ### Option 2: Disable New System (Minimal)
 
-```bash
-# Revert to old interview-research code
-cp supabase/functions/interview-research/index.ts.backup \
-   supabase/functions/interview-research/index.ts
-
-# Note: This won't work because cv_job_comparisons table is dropped
-# Use Option 1 (full restore) instead
-```
+**Note**: This option is not available as the old code structure is incompatible with the new database schema (cv_job_comparisons table was removed). Use Option 1 (full restore from backup) instead.
 
 ---
 
