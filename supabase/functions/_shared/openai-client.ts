@@ -6,7 +6,6 @@ export interface OpenAIRequest {
   prompt: string;
   systemPrompt: string;
   maxTokens: number;
-  temperature?: number;
   useJsonMode?: boolean;
 }
 
@@ -32,7 +31,6 @@ export async function callOpenAI(
       }
     ],
     max_tokens: request.maxTokens,
-    temperature: request.temperature || 0.3,
   };
 
   // Add JSON mode if requested (default from config)

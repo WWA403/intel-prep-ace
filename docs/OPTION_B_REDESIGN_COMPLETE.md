@@ -303,7 +303,7 @@ npx supabase gen types typescript --project-id xjjjvefsrkcszhuwtoss > src/types/
 - Comprehensive logging at each phase
 - Processing status tracked in database
 - Raw data always available for debugging
-- Synthesis metadata stored (model used, tokens, temperature)
+- Synthesis metadata stored (model used, tokens)
 
 ---
 

@@ -144,7 +144,6 @@ ${cvText}`
       }
     ],
     max_tokens: 2000,
-    temperature: 0.3,
   };
 
   // Use the logger's wrapped fetch for automatic logging

@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.43.2";
 import { SearchLogger } from "../_shared/logger.ts";
-import { RESEARCH_CONFIG, getOpenAIModel, getMaxTokens, getTemperature } from "../_shared/config.ts";
+import { RESEARCH_CONFIG, getOpenAIModel, getMaxTokens } from "../_shared/config.ts";
 import { ProgressTracker, PROGRESS_STEPS, CONCURRENT_TIMEOUTS, executeWithTimeout } from "../_shared/progress-tracker.ts";
 
 const corsHeaders = {
@@ -188,7 +188,6 @@ async function unifiedSynthesis(
 
     const model = getOpenAIModel('interviewSynthesis');
     const maxTokens = getMaxTokens('interviewSynthesis');
-    const temperature = getTemperature('synthesis');
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -209,8 +208,7 @@ async function unifiedSynthesis(
             content: synthesisPrompt
           }
         ],
-        max_tokens: maxTokens,
-        temperature
+        max_tokens: maxTokens
       })
     });
 
@@ -233,7 +231,6 @@ async function unifiedSynthesis(
       synthesis_metadata: {
         model,
         max_tokens: maxTokens,
-        temperature,
         timestamp: new Date().toISOString()
       }
     };
@@ -434,7 +431,7 @@ async function withDbTimeout<T>(
     return await Promise.race([operation(), timeoutPromise as Promise<T>]);
   } catch (error) {
     console.error(`❌ DB operation failed (${label}):`, error);
-    return null;
+    throw error;
   }
 }
 
@@ -528,7 +525,7 @@ async function saveToDatabase(
 
     // CHECKPOINT 3: Insert interview stages for UI display
     console.log("  → Saving interview stages...");
-    await withDbTimeout(
+    const stageRecords = await withDbTimeout(
       async () => {
         const stagesToInsert = (synthesis.interview_stages || []).map((stage: any, index: number) => ({
           search_id: searchId,
@@ -543,11 +540,12 @@ async function saveToDatabase(
           red_flags_to_avoid: stage.red_flags_to_avoid || []
         }));
 
-        if (stagesToInsert.length === 0) return null;
+        if (stagesToInsert.length === 0) return [];
 
         const { data, error } = await supabase
           .from('interview_stages')
-          .insert(stagesToInsert);
+          .insert(stagesToInsert)
+          .select();
 
         if (error) throw error;
         return data;
@@ -555,24 +553,55 @@ async function saveToDatabase(
       'Insert interview stages'
     );
 
-    console.log("✅ Interview stages saved");
+    const stageIdByOrder: Record<number, string> = {};
+    (stageRecords || []).forEach((stage: any) => {
+      if (stage.order_index) stageIdByOrder[stage.order_index] = stage.id;
+    });
+
+    console.log(`✅ Interview stages saved (${(stageRecords || []).length})`);
 
     // CHECKPOINT 4: Insert interview questions
     console.log("  → Saving interview questions...");
     await withDbTimeout(
       async () => {
+        if (!stageRecords || stageRecords.length === 0) {
+          throw new Error("No interview stages were inserted; cannot attach questions");
+        }
+
         const questionsToInsert: any[] = [];
+
+        const getStageIdForCategory = (category: string) => {
+          if (stageIdByOrder[1] && ['behavioral', 'cultural_fit'].includes(category)) return stageIdByOrder[1];
+          if (stageIdByOrder[2] && ['technical', 'role_specific'].includes(category)) return stageIdByOrder[2];
+          if (stageIdByOrder[3] && ['situational', 'experience_based'].includes(category)) return stageIdByOrder[3];
+          if (stageIdByOrder[4]) return stageIdByOrder[4];
+          return Object.values(stageIdByOrder)[0] || null;
+        };
+
+        const normalizeDifficulty = (difficulty?: string) => {
+          if (!difficulty) return 'Medium';
+          const d = difficulty.toLowerCase();
+          if (d === 'easy' || d === 'medium' || d === 'hard') {
+            return d.charAt(0).toUpperCase() + d.slice(1);
+          }
+          return 'Medium';
+        };
 
         if (synthesis.interview_questions_data) {
           Object.entries(synthesis.interview_questions_data).forEach(([category, questions]: [string, any]) => {
             if (Array.isArray(questions)) {
               questions.forEach((q: any) => {
+                const stageId = getStageIdForCategory(category);
+                if (!stageId) {
+                  throw new Error(`Missing stage_id when inserting questions for category ${category}`);
+                }
                 questionsToInsert.push({
                   search_id: searchId,
+                  stage_id: stageId,
                   question: q.question,
                   category: category,
                   question_type: 'synthesized',
-                  difficulty: q.difficulty || 'medium',
+                  difficulty: normalizeDifficulty(q.difficulty),
                   rationale: q.rationale || '',
                   suggested_answer_approach: q.suggested_answer_approach || '',
                   evaluation_criteria: q.evaluation_criteria || [],

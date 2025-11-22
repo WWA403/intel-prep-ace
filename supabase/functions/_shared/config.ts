@@ -33,12 +33,6 @@ export const RESEARCH_CONFIG = {
       questionGeneration: 3000,
       cvJobComparison: 4000,  // Added for CV-Job comparison
     },
-    temperature: {
-      analysis: 0.3,      // More deterministic for factual analysis
-      synthesis: 0.5,     // More creative for personalized guidance
-      questions: 0.5,     // Balanced for question generation
-      comparison: 0.5,    // Balanced for CV-Job comparison
-    },
     useJsonMode: true,    // Force JSON responses for reliability
   },
 
@@ -306,17 +300,6 @@ export const getMaxTokens = (
   return tokens || 3000;
 };
 
-/**
- * Get the temperature setting for a specific operation type
- * @param operationType - The type of operation (analysis, synthesis, questions, comparison)
- * @returns The temperature value for this operation
- */
-export const getTemperature = (
-  operationType: keyof typeof RESEARCH_CONFIG.openai.temperature = 'synthesis'
-): number => {
-  const temp = RESEARCH_CONFIG.openai.temperature[operationType];
-  return temp !== undefined ? temp : 0.5;
-};
 
 export const getCompanyTicker = (companyName: string): string => {
   return RESEARCH_CONFIG.search.companyTickers[companyName.toLowerCase()] || companyName.toUpperCase();

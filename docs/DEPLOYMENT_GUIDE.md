@@ -337,7 +337,7 @@ SELECT * FROM pg_policies WHERE tablename = 'search_artifacts';
 
 **Fix:**
 1. Review synthesis prompt in interview-research/index.ts
-2. Check OpenAI tokens and temperature settings
+2. Check OpenAI tokens and model settings
 3. Verify raw data quality being passed to OpenAI
 
 ---

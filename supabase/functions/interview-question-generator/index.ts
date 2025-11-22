@@ -292,7 +292,6 @@ You MUST return ONLY valid JSON in this exact structure - no markdown, no additi
         }
       ],
       max_tokens: 12000,
-      temperature: 0.7,
     }),
   });
 
