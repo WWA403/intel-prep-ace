@@ -88,10 +88,10 @@ const Auth = () => {
             <Brain className="h-8 w-8 text-primary" />
           </div>
           <h1 className="text-3xl font-bold">
-            <span className="text-primary">INT</span>
+            <span className="text-primary">Hireo</span>
           </h1>
           <p className="text-muted-foreground mt-2">
-            Sign in to access your interview intel
+            Sign in to access your interview insights
           </p>
         </div>
 

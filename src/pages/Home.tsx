@@ -227,10 +227,10 @@ const Home = () => {
       <div className="container mx-auto px-4 py-16">
         <div className="max-w-2xl mx-auto text-center mb-12">
           <h1 className="text-5xl font-bold tracking-tight mb-4">
-            <span className="text-primary">INT</span>
+            <span className="text-primary">Hireo</span>
           </h1>
           <p className="text-xl text-muted-foreground mb-8">
-            Get insider intel on any company's interview process. Tailored prep for you and your friends.
+            Get insider insights on any company's interview process. Tailored prep for you and your friends.
           </p>
           
           {/* Simple login/signup buttons for non-logged-in users */}
@@ -250,7 +250,7 @@ const Home = () => {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Search className="h-5 w-5 text-primary" />
-              Start Your Interview Intel
+              Start Your Interview Research
             </CardTitle>
             <CardDescription>
               Enter company details to get personalized interview insights and preparation guidance.
@@ -379,7 +379,7 @@ const Home = () => {
                 size="lg"
                 disabled={!formData.company.trim() || isLoading}
               >
-                {isLoading ? "Researching..." : "Run Intel"}
+                {isLoading ? "Researching..." : "Start Research"}
               </Button>
             </form>
           </CardContent>

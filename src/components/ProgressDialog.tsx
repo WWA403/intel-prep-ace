@@ -50,7 +50,7 @@ const ProgressDialog = ({
   }, [isStalled, stalledSeconds, hasShownRetryOffer, searchId]);
 
   const steps = [
-    { icon: Search, label: "Company Research", description: "Gathering intel from multiple sources..." },
+    { icon: Search, label: "Company Research", description: "Gathering insights from multiple sources..." },
     { icon: FileText, label: "Job Analysis", description: "Processing role requirements..." },
     { icon: Brain, label: "CV Analysis", description: "Evaluating your background..." },
     { icon: Users, label: "Question Generation", description: "Creating personalized questions..." },
@@ -138,7 +138,7 @@ const ProgressDialog = ({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Brain className="h-5 w-5 text-primary" />
-            Intel Research in Progress
+            Research in Progress
           </DialogTitle>
           <DialogDescription>
             Gathering comprehensive interview intelligence for <strong>{company}</strong>

@@ -1,4 +1,4 @@
-# INT - Interview Prep Tool 🎯
+# Hireo - Interview Prep Tool 🎯
 
 A modern, AI-powered interview preparation tool that helps small circles of friends and colleagues quickly learn how target companies run their interviews and prepare effectively.
 
@@ -63,7 +63,7 @@ A modern, AI-powered interview preparation tool that helps small circles of frie
    - Enter a company name (e.g., "Google", "Meta", "Stripe")
    - Optionally add role and location details
    - Upload your CV for personalized insights
-   - Click "Run Intel" and wait for AI research
+   - Click "Start Research" and wait for AI research
    - Note: Code Assistant can connect to Supabase via MCP and run read queries directly if you need to validate data during troubleshooting.
 
 4. **Review & Practice**
@@ -829,6 +829,197 @@ Per-Search Override:
 - `src/index.css` - Global styles and spacing
 </details>
 
+<details>
+<summary><b>Epic 4.4: Database Cleanup - Remove Unused Tables</b> ⏱️ 2-3 days</summary>
+
+**User Story**: As a developer, I want to clean up unused tables in Supabase to reduce database complexity, improve maintainability, and reduce costs.
+
+**Goals**:
+- Identify and remove unused or deprecated tables
+- Clean up orphaned data and relationships
+- Reduce database schema complexity
+- Improve query performance by removing unnecessary tables
+- Document which tables are actually in use
+
+**Tasks**:
+- [ ] Audit all tables in Supabase database
+- [ ] Identify tables that are no longer referenced in code
+- [ ] Check for tables from old migrations that are deprecated
+- [ ] Verify no active queries or Edge Functions reference unused tables
+- [ ] Check for foreign key dependencies before removal
+- [ ] Create backup of data before deletion (if needed)
+- [ ] Remove unused tables via migration
+- [ ] Update documentation to reflect current schema
+- [ ] Verify application still works after cleanup
+
+**Approach**:
+- Review all migrations to understand table history
+- Search codebase for table references (grep for table names)
+- Check Edge Functions for database queries
+- Verify RLS policies are not dependent on unused tables
+- Use Supabase MCP tools to list and analyze tables
+
+**Tables to Investigate**:
+- Review all tables in `public` schema
+- Check for legacy tables from previous implementations
+- Identify tables that may have been replaced by newer designs (e.g., `search_artifacts` consolidation)
+
+**Files to Review/Change**:
+- `supabase/migrations/` - Review all migrations to understand table evolution
+- `supabase/functions/**/index.ts` - Check for table references
+- `src/services/searchService.ts` - Verify which tables are actually queried
+- `supabase/schema.sql` - Update schema documentation
+- Create new migration: `supabase/migrations/YYYYMMDD_cleanup_unused_tables.sql`
+
+**Risk Assessment**:
+- ⚠️ **Medium Risk**: Need to ensure no active code references removed tables
+- ✅ **Low Risk**: Can be done incrementally, one table at a time
+- ✅ **Reversible**: Can restore from migration history if needed
+</details>
+
+<details>
+<summary><b>Epic 4.5: Project Rebranding - Intel Prep/INT → hireo</b> ⏱️ 3-5 days</summary>
+
+**User Story**: As a product, we need to rebrand the entire application from "Intel Prep" or "INT" to "Hireo" (H-I-R-E-O) across all code, documentation, and user-facing content.
+
+**Goals**:
+- Replace all instances of "Intel Prep" and "INT" with "Hireo"
+- Update branding throughout the application
+- Ensure consistent naming across codebase, documentation, and UI
+- Update project metadata, package names, and configuration files
+
+**Tasks**:
+- [x] Search codebase for all instances of "Intel Prep", "INT", "intel-prep", "intel_prep"
+- [x] Update application title and branding in UI components
+- [x] Update README.md and all documentation files
+- [x] Update package.json name and description
+- [x] Update HTML title tags and meta tags
+- [x] Update favicon and logo assets (if applicable)
+- [x] Update environment variable names (if any reference old name)
+- [x] Update database table names or comments (if they reference old name)
+- [x] Update Edge Function names or comments
+- [x] Update error messages and user-facing text
+- [x] Update navigation labels and page titles
+- [x] Update documentation in `docs/` folder
+- [x] Update any external references (e.g., deployment configs, CI/CD)
+- [x] Verify no broken references after rebranding
+- [x] Test application to ensure all changes work correctly
+
+**Search Patterns to Find**:
+- "Intel Prep" (case-insensitive)
+- "INT" (as project name, not generic "int")
+- "intel-prep" (kebab-case)
+- "intel_prep" (snake_case)
+- "intelPrep" (camelCase)
+- "IntelPrep" (PascalCase)
+
+**Files to Review/Change**:
+- `README.md` - Project title and description
+- `package.json` - Package name and description
+- `index.html` - HTML title and meta tags
+- `src/App.tsx` - Application title
+- `src/components/Navigation.tsx` - Navigation labels
+- `src/pages/**/*.tsx` - Page titles and headings
+- `docs/**/*.md` - All documentation files
+- `supabase/functions/**/index.ts` - Function comments and error messages
+- `public/favicon.ico` - Update if needed
+- `.env` files - Check for project name references
+- Deployment configurations (if any)
+
+**Areas to Update**:
+- **UI Text**: All user-facing strings, page titles, headings
+- **Code Comments**: Developer-facing documentation in code
+- **Documentation**: README, docs folder, inline comments
+- **Metadata**: Package.json, HTML meta tags, app manifest
+- **Branding Assets**: Logos, favicons, splash screens (if applicable)
+
+**Approach**:
+- Use grep/search to find all occurrences first
+- Create a checklist of files to update
+- Update systematically by category (UI → Code → Docs → Config)
+- Test after each category to catch issues early
+- Use find/replace carefully to avoid breaking code
+
+**Risk Assessment**:
+- ⚠️ **Medium Risk**: Need to ensure no broken references or functionality
+- ✅ **Low Risk**: Mostly text changes, no logic changes
+- ✅ **Reversible**: Can use git to revert if needed
+- ⚠️ **Attention**: Need to be careful with case-sensitive replacements
+</details>
+
+<details>
+<summary><b>Epic 4.6: CV Parsing and Profile Management</b> ⏱️ 5-7 days</summary>
+
+**User Story**: As a user, I want my CV content to be properly parsed, saved, and accessible in my profile so I can reuse it for future searches without re-uploading.
+
+**Problem Statement**:
+Currently, CV parsing and saving functionality is not working correctly. Users can paste CV content, but it doesn't appear in their personal profile for future use. The CV data is not being properly persisted or retrieved.
+
+**Goals**:
+- Fix CV parsing and saving functionality
+- Ensure CV data is properly stored in the database
+- Make saved CVs accessible in user profile
+- Allow users to view, edit, and manage their saved CVs
+- Enable CV reuse across multiple searches
+- Improve CV parsing accuracy and data extraction
+
+**Tasks**:
+- [ ] Investigate current CV parsing flow (frontend → backend → database)
+- [ ] Identify where CV data is being lost or not saved
+- [ ] Review `resumes` table structure and RLS policies
+- [ ] Check CV upload/paste functionality in Home page
+- [ ] Verify CV analysis Edge Function is saving data correctly
+- [ ] Test CV retrieval in Profile page
+- [ ] Fix database insertion/update logic for CVs
+- [ ] Fix CV retrieval logic in Profile page
+- [ ] Add UI to display saved CVs in Profile
+- [ ] Add ability to edit/update saved CVs
+- [ ] Add ability to delete saved CVs
+- [ ] Add ability to select saved CV for new searches
+- [ ] Improve CV parsing accuracy (skills, experience, education extraction)
+- [ ] Add validation for CV content
+- [ ] Add error handling and user feedback
+- [ ] Test end-to-end CV flow (upload → save → retrieve → reuse)
+
+**Areas to Investigate**:
+- **Frontend**: CV input handling, form submission, state management
+- **Backend**: CV analysis Edge Function, database operations
+- **Database**: `resumes` table schema, RLS policies, data integrity
+- **Profile Page**: CV display, management UI, retrieval logic
+- **Search Flow**: CV selection for new searches, CV reuse
+
+**Files to Review/Change**:
+- `src/pages/Home.tsx` - CV upload/paste functionality
+- `src/pages/Profile.tsx` - CV display and management
+- `src/services/searchService.ts` - CV save/retrieve methods
+- `supabase/functions/cv-analysis/index.ts` - CV parsing logic
+- `supabase/migrations/` - Review `resumes` table schema
+- Database: Check `resumes` table RLS policies
+- `src/integrations/supabase/types.ts` - Type definitions for resumes
+
+**Expected Behavior**:
+- User pastes/uploads CV → CV is parsed and saved to database
+- User navigates to Profile → Can see their saved CV(s)
+- User can edit/update saved CV
+- User can select saved CV when starting new search
+- CV data persists across sessions
+- CV parsing extracts: skills, experience, education, contact info
+
+**Design Considerations**:
+- Support multiple CVs per user (different versions/formats)
+- Allow CV preview before saving
+- Show parsing results (what was extracted)
+- Provide feedback on parsing quality
+- Support both text paste and file upload
+- Handle CV format variations (PDF, DOCX, plain text)
+
+**Risk Assessment**:
+- 🟡 **High Priority**: Core functionality that users expect to work
+- ⚠️ **Medium Risk**: Need to ensure data migration for existing users
+- ✅ **Low Risk**: Can be fixed incrementally
+- ⚠️ **Attention**: May need to handle existing CV data that wasn't saved properly
+</details>
+
 ---
 
 ### 📊 Priority Matrix
@@ -847,6 +1038,9 @@ Per-Search Override:
 | **4.1 Critical Component Testing** | 🟡 High | Medium | High | High |
 | **4.2 Research Pipeline Enhancements** | 🟡 High | High | Very High | Very High |
 | **4.3 Front-End UI/UX Improvements** | 🟡 High | Medium | Very High | High |
+| **4.4 Database Cleanup - Remove Unused Tables** | 🟢 Medium | Low | Low | Medium |
+| ~~**4.5 Project Rebranding - Intel Prep/INT → Hireo**~~ | ✅ Complete | Medium | Medium | High |
+| **4.6 CV Parsing and Profile Management** | 🔴 Critical | Medium | Very High | Very High |
 
 ---
 

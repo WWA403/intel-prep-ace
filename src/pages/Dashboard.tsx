@@ -215,7 +215,7 @@ const Dashboard = () => {
                 </div>
                 <CardTitle>No Active Search</CardTitle>
                 <CardDescription>
-                  Start a new search to get personalized interview intel for any company
+                  Start a new search to get personalized interview insights for any company
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -253,7 +253,7 @@ const Dashboard = () => {
           <Card className="w-full max-w-md mx-auto">
             <CardHeader className="text-center">
               <AlertCircle className="h-12 w-12 text-destructive mx-auto mb-4" />
-              <CardTitle>Error Loading Interview Intel</CardTitle>
+              <CardTitle>Error Loading Interview Research</CardTitle>
             </CardHeader>
             <CardContent>
               <Alert variant="destructive" className="mb-4">
@@ -300,7 +300,7 @@ const Dashboard = () => {
           <Card className="w-full max-w-md mx-auto">
             <CardHeader className="text-center">
               <Brain className="h-12 w-12 text-primary mx-auto mb-4" />
-              <CardTitle>Researching Interview Intel</CardTitle>
+              <CardTitle>Researching Interview Insights</CardTitle>
               <CardDescription>
                 {searchData?.company && `for ${searchData.company}`}
                 {searchData?.role && ` - ${searchData.role}`}
@@ -329,7 +329,7 @@ const Dashboard = () => {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h1 className="text-3xl font-bold">
-                {searchData?.company || 'Company'} Interview Intel
+                {searchData?.company || 'Company'} Interview Research
               </h1>
               <p className="text-muted-foreground">
                 {searchData?.role && `${searchData.role}`}
