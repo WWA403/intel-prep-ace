@@ -284,7 +284,7 @@ QUALITY REQUIREMENTS - STRICTLY ENFORCE:
   * Company culture, values, and interview philosophy
   * Real interview questions extracted from candidate reports
 - SPECIFICITY: All questions must be SPECIFIC and ACTIONABLE (NO generic placeholders)
-  * Instead of "Tell me about a challenge" → "Tell me about a time you optimized a system at scale, similar to what we do at ${company}"
+  * Instead of "Tell me about a challenge" → "Tell me about a time you optimized a system at scale, similar to what we do at [Company Name]"
   * Instead of "Solve a coding problem" → "Design a distributed caching system for our product recommendation engine"
 - INTERVIEW STAGES: Must match ACTUAL company processes from candidate reports (not generic assumptions)
 - DIFFICULTY ADAPTATION: Questions must match candidate's seniority level in complexity, not just quantity
