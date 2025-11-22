@@ -1,6 +1,6 @@
-# Intel Interview Prep - Documentation
+# Hireo - Documentation
 
-Welcome to the Intel Interview Prep documentation. This folder contains all guides for understanding, maintaining, and deploying the system.
+Welcome to the Hireo documentation. This folder contains all guides for understanding, maintaining, and deploying the system.
 
 ## Quick Navigation
 
@@ -33,7 +33,7 @@ Welcome to the Intel Interview Prep documentation. This folder contains all guid
 
 ## System Overview
 
-The Intel Interview Prep Tool is an AI-powered interview preparation platform that uses:
+Hireo is an AI-powered interview preparation platform that uses:
 
 - **Frontend:** React 18 + TypeScript + Tailwind CSS
 - **Backend:** Supabase Edge Functions (Deno)

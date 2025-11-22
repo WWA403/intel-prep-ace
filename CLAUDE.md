@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-INT Interview Prep Tool is an AI-powered platform that helps job candidates prepare for technical interviews by providing comprehensive company research, tailored interview questions, and personalized preparation guidance. The application uses advanced AI to analyze job descriptions, research companies, and generate relevant interview materials.
+Hireo is an AI-powered platform that helps job candidates prepare for technical interviews by providing comprehensive company research, tailored interview questions, and personalized preparation guidance. The application uses advanced AI to analyze job descriptions, research companies, and generate relevant interview materials.
 
 ## Architecture & Tech Stack
 
