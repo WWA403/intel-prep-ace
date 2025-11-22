@@ -860,6 +860,17 @@ async function saveToDatabase(
 
     // CHECKPOINT 4: Insert interview questions
     console.log("  → Saving interview questions...");
+    
+    // Calculate total questions count before insertion
+    let totalQuestionsCount = 0;
+    if (synthesis.interview_questions_data) {
+      Object.values(synthesis.interview_questions_data).forEach((questions: any) => {
+        if (Array.isArray(questions)) {
+          totalQuestionsCount += questions.length;
+        }
+      });
+    }
+    
     await withDbTimeout(
       async () => {
         if (!stageRecords || stageRecords.length === 0) {
@@ -933,10 +944,9 @@ async function saveToDatabase(
       'Insert interview questions'
     );
 
-    const totalSaved = questionsToInsert.length;
-    console.log(`✅ Interview questions saved: ${totalSaved} questions`);
-    if (totalSaved < 20) {
-      console.warn(`⚠️ WARNING: Only ${totalSaved} questions were saved. Expected 30-50 questions.`);
+    console.log(`✅ Interview questions saved: ${totalQuestionsCount} questions`);
+    if (totalQuestionsCount < 20) {
+      console.warn(`⚠️ WARNING: Only ${totalQuestionsCount} questions were saved. Expected 30-50 questions.`);
     }
 
     // CHECKPOINT 5: Update search status
