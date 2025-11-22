@@ -947,6 +947,79 @@ Per-Search Override:
 - ⚠️ **Attention**: Need to be careful with case-sensitive replacements
 </details>
 
+<details>
+<summary><b>Epic 4.6: CV Parsing and Profile Management</b> ⏱️ 5-7 days</summary>
+
+**User Story**: As a user, I want my CV content to be properly parsed, saved, and accessible in my profile so I can reuse it for future searches without re-uploading.
+
+**Problem Statement**:
+Currently, CV parsing and saving functionality is not working correctly. Users can paste CV content, but it doesn't appear in their personal profile for future use. The CV data is not being properly persisted or retrieved.
+
+**Goals**:
+- Fix CV parsing and saving functionality
+- Ensure CV data is properly stored in the database
+- Make saved CVs accessible in user profile
+- Allow users to view, edit, and manage their saved CVs
+- Enable CV reuse across multiple searches
+- Improve CV parsing accuracy and data extraction
+
+**Tasks**:
+- [ ] Investigate current CV parsing flow (frontend → backend → database)
+- [ ] Identify where CV data is being lost or not saved
+- [ ] Review `resumes` table structure and RLS policies
+- [ ] Check CV upload/paste functionality in Home page
+- [ ] Verify CV analysis Edge Function is saving data correctly
+- [ ] Test CV retrieval in Profile page
+- [ ] Fix database insertion/update logic for CVs
+- [ ] Fix CV retrieval logic in Profile page
+- [ ] Add UI to display saved CVs in Profile
+- [ ] Add ability to edit/update saved CVs
+- [ ] Add ability to delete saved CVs
+- [ ] Add ability to select saved CV for new searches
+- [ ] Improve CV parsing accuracy (skills, experience, education extraction)
+- [ ] Add validation for CV content
+- [ ] Add error handling and user feedback
+- [ ] Test end-to-end CV flow (upload → save → retrieve → reuse)
+
+**Areas to Investigate**:
+- **Frontend**: CV input handling, form submission, state management
+- **Backend**: CV analysis Edge Function, database operations
+- **Database**: `resumes` table schema, RLS policies, data integrity
+- **Profile Page**: CV display, management UI, retrieval logic
+- **Search Flow**: CV selection for new searches, CV reuse
+
+**Files to Review/Change**:
+- `src/pages/Home.tsx` - CV upload/paste functionality
+- `src/pages/Profile.tsx` - CV display and management
+- `src/services/searchService.ts` - CV save/retrieve methods
+- `supabase/functions/cv-analysis/index.ts` - CV parsing logic
+- `supabase/migrations/` - Review `resumes` table schema
+- Database: Check `resumes` table RLS policies
+- `src/integrations/supabase/types.ts` - Type definitions for resumes
+
+**Expected Behavior**:
+- User pastes/uploads CV → CV is parsed and saved to database
+- User navigates to Profile → Can see their saved CV(s)
+- User can edit/update saved CV
+- User can select saved CV when starting new search
+- CV data persists across sessions
+- CV parsing extracts: skills, experience, education, contact info
+
+**Design Considerations**:
+- Support multiple CVs per user (different versions/formats)
+- Allow CV preview before saving
+- Show parsing results (what was extracted)
+- Provide feedback on parsing quality
+- Support both text paste and file upload
+- Handle CV format variations (PDF, DOCX, plain text)
+
+**Risk Assessment**:
+- 🟡 **High Priority**: Core functionality that users expect to work
+- ⚠️ **Medium Risk**: Need to ensure data migration for existing users
+- ✅ **Low Risk**: Can be fixed incrementally
+- ⚠️ **Attention**: May need to handle existing CV data that wasn't saved properly
+</details>
+
 ---
 
 ### 📊 Priority Matrix
@@ -967,6 +1040,7 @@ Per-Search Override:
 | **4.3 Front-End UI/UX Improvements** | 🟡 High | Medium | Very High | High |
 | **4.4 Database Cleanup - Remove Unused Tables** | 🟢 Medium | Low | Low | Medium |
 | ~~**4.5 Project Rebranding - Intel Prep/INT → Hireo**~~ | ✅ Complete | Medium | Medium | High |
+| **4.6 CV Parsing and Profile Management** | 🔴 Critical | Medium | Very High | Very High |
 
 ---
 
