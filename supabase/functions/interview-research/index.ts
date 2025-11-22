@@ -1417,7 +1417,7 @@ serve(async (req: Request) => {
     // ============================================================
     
     console.log("\n🔍 Checking question count and generating additional questions if needed...");
-    // Use QUESTION_GENERATION_START since we're generating additional questions
+    await tracker.updateStep('QUESTION_VALIDATION_START');
     
     const finalSynthesis = await ensureMinimumQuestions(
       synthesis,
