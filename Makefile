@@ -20,7 +20,7 @@ test: test-unit
 # Run all unit tests
 test-unit:
 	@echo "🧪 Running all unit tests..."
-	@source .env && deno test --allow-all --no-check tests/unit/test_edge_functions/*.ts
+	@source .env.local && deno test --allow-all --no-check tests/unit/test_edge_functions/*.ts
 
 # Run integration tests (placeholder for future)
 test-integration:
