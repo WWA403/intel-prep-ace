@@ -152,7 +152,7 @@ Deno.test({
           role: "Software Engineer",
           country: "United States",
           roleLinks: [
-            "https://www.google.com/about/careers/applications/jobs/results/123456789"
+            "https://www.google.com/about/careers/applications/jobs/results/89308786006598342-software-engineer-early-career-2025-start"
           ],
           cv: generateSampleCV(),
           targetSeniority: "mid"
@@ -266,10 +266,10 @@ Deno.test({
         body: JSON.stringify({
           searchId: searchId,
           userId: userId,
-          company: "Meta",
-          role: "Senior Engineer",
-          country: "United States",
-          roleLinks: ["https://www.metacareers.com/jobs/1234567890"],
+          company: "PwC",
+          role: "Audit Senior Associate",
+          country: "United Kingdom",
+          roleLinks: ["https://jobs.pwc.co.uk/uk/en/job/PUDPUNUK579983WDEXTERNALENUK/Audit-Senior-Associate"],
           cv: generateSampleCV(),
           targetSeniority: "senior"
         })
