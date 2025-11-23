@@ -217,12 +217,12 @@ Deno.test({
         console.log(`    ${category}: ${questionBank[category].length}`);
       }
 
-      // Step 5: Verify total question count (at least some questions generated)
-      // Note: Edge Function aims for 30-50 but may generate fewer based on OpenAI response
+      // Step 5: Verify total question count (at least 2-3 questions)
+      // Note: Edge Function aims for 30-50 but OpenAI may generate fewer due to randomness
       assertEquals(
-        result.total_questions > 0,
+        result.total_questions >= 2,
         true,
-        `Should generate at least some questions, got ${result.total_questions}`
+        `Should generate at least 2 questions, got ${result.total_questions}`
       );
       console.log(`  📊 Total questions generated: ${result.total_questions}`);
 
@@ -315,12 +315,12 @@ Deno.test({
           status: result.status
         });
 
-        // Verify questions generated
+        // Verify questions generated (at least 2-3)
         assertEquals(result.status, "success");
         assertEquals(
-          result.total_questions > 0,
+          result.total_questions >= 2,
           true,
-          "Should generate at least some questions for junior candidates"
+          "Should generate at least 2 questions for junior candidates"
         );
 
         console.log("  ✅ Junior candidate question generation verified");
