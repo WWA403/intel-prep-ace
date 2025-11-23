@@ -41,6 +41,47 @@ import { SessionSummary } from "@/components/SessionSummary";
 const SWIPE_THRESHOLD_PX = 80;
 const VERTICAL_SCROLL_SUPPRESSION_DELTA = 18;
 const VERTICAL_SWIPE_THRESHOLD_PX = 80;
+const PRACTICE_SETUP_STORAGE_KEY = "practiceSetupDefaults";
+
+const SETUP_STEPS = [
+  { key: "goal", label: "Goal" },
+  { key: "stages", label: "Stages" },
+  { key: "filters", label: "Filters" },
+  { key: "review", label: "Review" }
+] as const;
+
+const practicePresets = {
+  quick: {
+    label: "Quick Practice",
+    description: "10 shuffled questions across all stages.",
+    config: {
+      sampleSize: 10,
+      shuffle: true,
+      categories: [] as string[],
+      difficulties: [] as string[],
+      favoritesOnly: false
+    }
+  },
+  deep: {
+    label: "Deep Dive",
+    description: "30 sequential questions with full context.",
+    config: {
+      sampleSize: 30,
+      shuffle: false,
+      categories: [] as string[],
+      difficulties: [] as string[],
+      favoritesOnly: false
+    }
+  }
+} as const;
+
+type PracticeDefaults = {
+  sampleSize: number;
+  categories: string[];
+  difficulties: string[];
+  shuffle: boolean;
+  favoritesOnly: boolean;
+};
 
 interface EnhancedQuestion {
   question: string;
@@ -144,6 +185,9 @@ const Practice = () => {
   
   // Session state: 'setup' | 'inProgress' | 'completed'
   const [sessionState, setSessionState] = useState<'setup' | 'inProgress' | 'completed'>('setup');
+  const [setupStep, setSetupStep] = useState(0);
+  const [selectedPreset, setSelectedPreset] = useState<string | null>(null);
+  const [rememberDefaults, setRememberDefaults] = useState(true);
   const hasDismissedSwipeHintRef = useRef(false);
   const [shouldShowSwipeHint, setShouldShowSwipeHint] = useState(true);
   const [isVerticalScrollGuarded, setIsVerticalScrollGuarded] = useState(false);
@@ -160,7 +204,92 @@ const Practice = () => {
   // Swipe gesture states
   const [swipeDirection, setSwipeDirection] = useState<'left' | 'right' | 'up' | null>(null);
   const [swipeDelta, setSwipeDelta] = useState(0);
-  const [showGuidance, setShowGuidance] = useState(false);
+  const [detailsExpanded, setDetailsExpanded] = useState(false);
+
+  const loadPracticeDefaults = () => {
+    if (typeof window === "undefined") return false;
+    try {
+      const stored = localStorage.getItem(PRACTICE_SETUP_STORAGE_KEY);
+      if (stored) {
+        const parsed: PracticeDefaults = JSON.parse(stored);
+        if (typeof parsed.sampleSize === "number") {
+          setSampleSize(parsed.sampleSize);
+        }
+        if (Array.isArray(parsed.categories)) {
+          setTempCategories(parsed.categories);
+        }
+        if (Array.isArray(parsed.difficulties)) {
+          setTempDifficulties(parsed.difficulties);
+        }
+        if (typeof parsed.shuffle === "boolean") {
+          setTempShuffle(parsed.shuffle);
+        }
+        if (typeof parsed.favoritesOnly === "boolean") {
+          setTempShowFavoritesOnly(parsed.favoritesOnly);
+        }
+        setRememberDefaults(true);
+        return true;
+      }
+    } catch (error) {
+      console.error("Failed to read practice defaults", error);
+    }
+    return false;
+  };
+
+  const persistPracticeDefaults = () => {
+    if (typeof window === "undefined") return;
+    if (!rememberDefaults) {
+      localStorage.removeItem(PRACTICE_SETUP_STORAGE_KEY);
+      return;
+    }
+
+    const payload: PracticeDefaults = {
+      sampleSize,
+      categories: tempCategories,
+      difficulties: tempDifficulties,
+      shuffle: tempShuffle,
+      favoritesOnly: tempShowFavoritesOnly
+    };
+
+    try {
+      localStorage.setItem(PRACTICE_SETUP_STORAGE_KEY, JSON.stringify(payload));
+    } catch (error) {
+      console.error("Failed to persist practice defaults", error);
+    }
+  };
+
+  const handlePresetSelect = (presetKey: keyof typeof practicePresets) => {
+    const preset = practicePresets[presetKey];
+    setSelectedPreset(presetKey);
+    setSampleSize(preset.config.sampleSize);
+    setTempShuffle(preset.config.shuffle);
+    setTempCategories([...preset.config.categories]);
+    setTempDifficulties([...preset.config.difficulties]);
+    setTempShowFavoritesOnly(preset.config.favoritesOnly);
+  };
+
+  const canProceedFromSetupStep = () => {
+    switch (setupStep) {
+      case 0:
+        return sampleSize > 0;
+      case 1:
+        return allStages.some(stage => stage.selected);
+      default:
+        return true;
+    }
+  };
+
+  const goToNextSetupStep = () => {
+    if (setupStep < SETUP_STEPS.length - 1 && canProceedFromSetupStep()) {
+      setSetupStep(prev => prev + 1);
+    }
+  };
+
+  const goToPreviousSetupStep = () => {
+    if (setupStep > 0) {
+      setSetupStep(prev => prev - 1);
+    }
+  };
 
   const questionCategories = [
     { value: 'all', label: 'All Categories' },
@@ -222,6 +351,11 @@ const getInterviewerFocus = (
     }
   };
 };
+
+  // Load stored setup defaults on mount
+  useEffect(() => {
+    loadPracticeDefaults();
+  }, []);
 
   // Load search data and set up stages
   useEffect(() => {
@@ -551,10 +685,18 @@ const getInterviewerFocus = (
     setAppliedDifficulties(tempDifficulties);
     setAppliedShuffle(tempShuffle);
     setShowFavoritesOnly(tempShowFavoritesOnly);
+    const hasSelectedStages = allStages.some(stage => stage.selected);
+    if (!hasSelectedStages) {
+      setSetupStep(1);
+      return;
+    }
+    persistPracticeDefaults();
     hasDismissedSwipeHintRef.current = false;
     setShouldShowSwipeHint(true);
     setIsVerticalScrollGuarded(false);
     swipeUpReadyRef.current = false;
+    setSetupStep(0);
+    setSelectedPreset(null);
     
     setUseSampling(true);
     setSessionState('inProgress');
@@ -563,6 +705,7 @@ const getInterviewerFocus = (
 
   const handleStartNewSession = () => {
     setSessionState('setup');
+    setSetupStep(0);
     setUseSampling(false);
     setCurrentIndex(0);
     setAnswers(new Map());
@@ -574,10 +717,15 @@ const getInterviewerFocus = (
     setAppliedDifficulties([]);
     setAppliedShuffle(false);
     setShowFavoritesOnly(false);
-    setTempCategories([]);
-    setTempDifficulties([]);
-    setTempShuffle(false);
-    setTempShowFavoritesOnly(false);
+    const restoredDefaults = loadPracticeDefaults();
+    if (!restoredDefaults) {
+      setSampleSize(10);
+      setTempCategories([]);
+      setTempDifficulties([]);
+      setTempShuffle(false);
+      setTempShowFavoritesOnly(false);
+    }
+    setSelectedPreset(null);
     hasDismissedSwipeHintRef.current = false;
     setShouldShowSwipeHint(false);
     setIsVerticalScrollGuarded(false);
@@ -728,10 +876,10 @@ const getInterviewerFocus = (
   const answeredCount = questions.filter(q => q.answered).length;
   const selectedStagesCount = allStages.filter(stage => stage.selected).length;
   const currentQuestionTime = getCurrentQuestionTime();
-const interviewerFocus = getInterviewerFocus(currentQuestion ?? null, {
-  company: searchData?.company,
-  role: searchData?.role
-});
+  const interviewerFocus = getInterviewerFocus(currentQuestion ?? null, {
+    company: searchData?.company,
+    role: searchData?.role
+  });
 
   // Swipe handlers
   const handleSwipeLeft = () => {
@@ -758,14 +906,14 @@ const interviewerFocus = getInterviewerFocus(currentQuestion ?? null, {
 
   const handleSwipeUp = () => {
     hideSwipeHint();
-    setShowGuidance(!showGuidance);
+    setDetailsExpanded(prev => !prev);
   };
 
   // Reset swipe state when question changes
   useEffect(() => {
     setSwipeDirection(null);
     setSwipeDelta(0);
-    setShowGuidance(false);
+    setDetailsExpanded(false);
   }, [currentIndex]);
 
   // Swipe configuration
@@ -1026,6 +1174,168 @@ const interviewerFocus = getInterviewerFocus(currentQuestion ?? null, {
 
   // Session Setup State - Show filters and configuration
   if (sessionState === 'setup') {
+    const renderSetupStepContent = () => {
+      switch (setupStep) {
+        case 0:
+          return (
+            <div className="space-y-6">
+              <div className="grid gap-3 md:grid-cols-2">
+                {Object.entries(practicePresets).map(([key, preset]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => handlePresetSelect(key as keyof typeof practicePresets)}
+                    className={`rounded-xl border p-4 text-left transition hover:border-primary/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${
+                      selectedPreset === key ? 'border-primary bg-primary/5' : 'border-border'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium">{preset.label}</span>
+                      {selectedPreset === key && (
+                        <Badge variant="secondary" className="text-xs">
+                          Selected
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="mt-2 text-sm text-muted-foreground">{preset.description}</p>
+                  </button>
+                ))}
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-muted-foreground">Number of Questions</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="100"
+                  value={sampleSize}
+                  onChange={(e) => setSampleSize(sessionSampler.validateSampleSize(parseInt(e.target.value) || 10))}
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                />
+                <p className="text-xs text-muted-foreground">Pick 1–100 questions for this session. Presets adjust this automatically.</p>
+              </div>
+            </div>
+          );
+        case 1:
+          return (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">Choose at least one stage to include in this practice run.</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {allStages.map((stage, index) => {
+                  const totalQuestions = stage.questions?.length || 0;
+                  return (
+                    <div key={stage.id} className="flex items-center space-x-3 rounded-lg border p-3">
+                      <Checkbox
+                        checked={stage.selected}
+                        onCheckedChange={() => handleStageToggle(stage.id)}
+                        aria-label={`Toggle ${stage.name}`}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Badge variant="outline" className="text-xs">
+                            Stage {index + 1}
+                          </Badge>
+                          <span className="font-medium text-sm truncate">{stage.name}</span>
+                        </div>
+                        <div className="text-xs text-muted-foreground">{totalQuestions} question{totalQuestions !== 1 ? 's' : ''} available</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {selectedStagesCount === 0 && (
+                <p className="text-xs text-amber-600">Select at least one stage to continue.</p>
+              )}
+            </div>
+          );
+        case 2:
+          return (
+            <div className="space-y-5">
+              <div className="space-y-3">
+                <label className="text-xs font-medium text-muted-foreground">Categories</label>
+                <p className="text-xs text-muted-foreground">Leave unselected to include all categories.</p>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                  {questionCategories.filter(cat => cat.value !== 'all').map(cat => (
+                    <div key={cat.value} className="flex items-center space-x-2 rounded-md border bg-background px-2 py-1">
+                      <Checkbox
+                        id={`cat-${cat.value}`}
+                        checked={tempCategories.includes(cat.value)}
+                        onCheckedChange={() => toggleCategory(cat.value)}
+                      />
+                      <label htmlFor={`cat-${cat.value}`} className="text-xs cursor-pointer">{cat.label}</label>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-3">
+                <label className="text-xs font-medium text-muted-foreground">Difficulty</label>
+                <div className="flex flex-wrap gap-2">
+                  {difficultyLevels.filter(level => level.value !== 'all').map(level => (
+                    <div key={level.value} className="flex items-center space-x-2 rounded-md border bg-background px-3 py-2">
+                      <Checkbox
+                        id={`diff-${level.value}`}
+                        checked={tempDifficulties.includes(level.value)}
+                        onCheckedChange={() => toggleDifficulty(level.value)}
+                      />
+                      <label htmlFor={`diff-${level.value}`} className="text-xs cursor-pointer">{level.label}</label>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-muted-foreground">Order & Favorites</label>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <div className="flex items-center space-x-2 rounded-md border bg-background px-3 py-2">
+                    <Checkbox
+                      id="shuffle"
+                      checked={tempShuffle}
+                      onCheckedChange={(checked) => setTempShuffle(!!checked)}
+                    />
+                    <label htmlFor="shuffle" className="text-xs cursor-pointer">Shuffle questions randomly</label>
+                  </div>
+                  <div className="flex items-center space-x-2 rounded-md border bg-background px-3 py-2">
+                    <Checkbox
+                      id="favorites-only"
+                      checked={tempShowFavoritesOnly}
+                      onCheckedChange={(checked) => setTempShowFavoritesOnly(!!checked)}
+                    />
+                    <label htmlFor="favorites-only" className="text-xs cursor-pointer flex items-center gap-1">
+                      <Star className="h-3 w-3 text-amber-500" />
+                      Favorites only
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        default:
+          return (
+            <div className="space-y-4">
+              <div className="rounded-lg border bg-muted/30 p-4">
+                <h4 className="text-sm font-medium mb-2">Session Summary</h4>
+                <ul className="space-y-1 text-sm text-muted-foreground">
+                  <li>• {sampleSize} question{sampleSize !== 1 ? 's' : ''} selected</li>
+                  <li>• {selectedStagesCount} stage{selectedStagesCount !== 1 ? 's' : ''} included</li>
+                  <li>• Categories: {tempCategories.length ? tempCategories.map(c => questionCategories.find(cat => cat.value === c)?.label).join(", ") : "All"}</li>
+                  <li>• Difficulty: {tempDifficulties.length ? tempDifficulties.join(", ") : "All levels"}</li>
+                  <li>• Order: {tempShuffle ? "Shuffled" : "Stage order"}</li>
+                  <li>• Favorites: {tempShowFavoritesOnly ? "Only favorited questions" : "All questions"}</li>
+                </ul>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="remember-defaults"
+                  checked={rememberDefaults}
+                  onCheckedChange={(checked) => setRememberDefaults(!!checked)}
+                />
+                <label htmlFor="remember-defaults" className="text-sm text-muted-foreground">
+                  Remember these defaults for next time
+                </label>
+              </div>
+            </div>
+          );
+      }
+    };
+
     return (
       <div className="min-h-screen bg-background">
         <Navigation />
@@ -1048,181 +1358,57 @@ const interviewerFocus = getInterviewerFocus(currentQuestion ?? null, {
                 Configure Your Practice Session
               </CardTitle>
               <CardDescription>
-                Set up your practice preferences before starting the session
+                Step {setupStep + 1} of {SETUP_STEPS.length}: {SETUP_STEPS[setupStep].label}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              {/* Practice Session Sampler */}
-              <div className="space-y-4 border-b pb-4">
-                <h4 className="text-sm font-medium">Practice Session</h4>
-                <div className="flex items-end gap-3">
-                  <div className="flex-1 space-y-2">
-                    <label className="text-xs text-muted-foreground">Number of Questions</label>
-                    <input
-                      type="number"
-                      min="1"
-                      max="100"
-                      value={sampleSize}
-                      onChange={(e) => setSampleSize(sessionSampler.validateSampleSize(parseInt(e.target.value) || 10))}
-                      className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Select how many questions you want to practice (1-100)
-                    </p>
+              <div className="flex flex-wrap items-center gap-3">
+                {SETUP_STEPS.map((step, index) => (
+                  <div key={step.key} className="flex items-center gap-2">
+                    <div
+                      className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-medium ${
+                        index <= setupStep ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
+                      }`}
+                    >
+                      {index + 1}
+                    </div>
+                    <span className={`text-sm ${index === setupStep ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>
+                      {step.label}
+                    </span>
+                    {index < SETUP_STEPS.length - 1 && <div className="h-px w-6 bg-border" />}
                   </div>
-                </div>
-              </div>
-              
-              {/* Question Filtering */}
-              <div className="space-y-4 border-b pb-4">
-                <h4 className="text-sm font-medium">Question Filters (Optional)</h4>
-                <p className="text-xs text-muted-foreground">
-                  Leave unchecked to include all categories and difficulty levels
-                </p>
-                
-                {/* Categories */}
-                <div className="space-y-3">
-                  <label className="text-xs font-medium text-muted-foreground">Categories</label>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                    {questionCategories.filter(cat => cat.value !== 'all').map(cat => (
-                      <div key={cat.value} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={`cat-${cat.value}`}
-                          checked={tempCategories.includes(cat.value)}
-                          onCheckedChange={() => toggleCategory(cat.value)}
-                        />
-                        <label 
-                          htmlFor={`cat-${cat.value}`} 
-                          className="text-xs cursor-pointer leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                        >
-                          {cat.label}
-                        </label>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                
-                {/* Difficulty */}
-                <div className="space-y-3">
-                  <label className="text-xs font-medium text-muted-foreground">Difficulty</label>
-                  <div className="flex flex-wrap gap-3">
-                    {difficultyLevels.filter(level => level.value !== 'all').map(level => (
-                      <div key={level.value} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={`diff-${level.value}`}
-                          checked={tempDifficulties.includes(level.value)}
-                          onCheckedChange={() => toggleDifficulty(level.value)}
-                        />
-                        <label 
-                          htmlFor={`diff-${level.value}`} 
-                          className="text-xs cursor-pointer leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                        >
-                          {level.label}
-                        </label>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                
-                {/* Shuffle */}
-                <div className="space-y-2">
-                  <label className="text-xs font-medium text-muted-foreground">Order</label>
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id="shuffle"
-                      checked={tempShuffle}
-                      onCheckedChange={(checked) => setTempShuffle(checked as boolean)}
-                    />
-                    <label htmlFor="shuffle" className="text-xs cursor-pointer">
-                      Shuffle questions randomly
-                    </label>
-                  </div>
-                </div>
-                
-                {/* Favorites Filter (Epic 1.3) */}
-                <div className="space-y-2">
-                  <label className="text-xs font-medium text-muted-foreground">Favorites</label>
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id="favorites-only"
-                      checked={tempShowFavoritesOnly}
-                      onCheckedChange={(checked) => setTempShowFavoritesOnly(checked as boolean)}
-                    />
-                    <label htmlFor="favorites-only" className="text-xs cursor-pointer flex items-center gap-1">
-                      <Star className="h-3 w-3 text-amber-500" />
-                      Show only favorited questions
-                    </label>
-                  </div>
-                </div>
-              </div>
-              
-              {/* Stage Selection */}
-              <div className="space-y-3">
-                <h4 className="text-sm font-medium">Interview Stages</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {allStages.map((stage, index) => {
-                    const totalQuestions = stage.questions?.length || 0;
-                    
-                    return (
-                      <div key={stage.id} className="flex items-center space-x-3 p-3 border rounded">
-                        <Checkbox
-                          checked={stage.selected}
-                          onCheckedChange={() => handleStageToggle(stage.id)}
-                        />
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <Badge variant="outline" className="text-xs">
-                              Stage {index + 1}
-                            </Badge>
-                            <span className="font-medium text-sm truncate">{stage.name}</span>
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {totalQuestions} question{totalQuestions !== 1 ? 's' : ''} available
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                ))}
               </div>
 
-              {/* Begin Session Button */}
-              <div className="pt-4 border-t space-y-3">
-                {/* Filter Summary */}
-                <div className="text-xs text-muted-foreground space-y-1">
-                  <div>
-                    • {allStages.filter(s => s.selected).length} stage{allStages.filter(s => s.selected).length !== 1 ? 's' : ''} selected
-                  </div>
-                  {tempCategories.length > 0 && (
-                    <div>
-                      • Categories: {tempCategories.map(c => questionCategories.find(cat => cat.value === c)?.label).join(', ')}
-                    </div>
-                  )}
-                  {tempDifficulties.length > 0 && (
-                    <div>
-                      • Difficulty: {tempDifficulties.join(', ')}
-                    </div>
-                  )}
-                  {tempCategories.length === 0 && tempDifficulties.length === 0 && (
-                    <div>• All categories and difficulty levels included</div>
-                  )}
-                  {tempShuffle && <div>• Questions will be shuffled</div>}
-                  {tempShowFavoritesOnly && <div>• <Star className="h-3 w-3 inline text-amber-500" /> Showing favorites only</div>}
-                </div>
-                
+              {renderSetupStepContent()}
+
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t">
                 <Button
-                  onClick={handleBeginSession}
-                  size="lg"
-                  className="w-full"
-                  disabled={allStages.filter(s => s.selected).length === 0}
+                  variant="ghost"
+                  onClick={goToPreviousSetupStep}
+                  disabled={setupStep === 0}
+                  className="w-full sm:w-auto"
                 >
-                  <Play className="h-4 w-4 mr-2" />
-                  Begin Practice Session ({sampleSize} Questions)
+                  <ChevronLeft className="h-4 w-4 mr-2" />
+                  Previous
                 </Button>
-                {allStages.filter(s => s.selected).length === 0 && (
-                  <p className="text-xs text-amber-600 text-center mt-2">
-                    Please select at least one interview stage to begin
-                  </p>
+                {setupStep < SETUP_STEPS.length - 1 ? (
+                  <Button
+                    onClick={goToNextSetupStep}
+                    disabled={!canProceedFromSetupStep()}
+                    className="w-full sm:w-auto"
+                  >
+                    Next • {SETUP_STEPS[setupStep + 1].label}
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={handleBeginSession}
+                    disabled={!canProceedFromSetupStep() || selectedStagesCount === 0}
+                    className="w-full sm:w-auto"
+                  >
+                    <Play className="h-4 w-4 mr-2" />
+                    Start Practice
+                  </Button>
                 )}
               </div>
             </CardContent>
@@ -1346,7 +1532,7 @@ const interviewerFocus = getInterviewerFocus(currentQuestion ?? null, {
                 {swipeDirection === 'up' && (
                   <>
                     <ArrowUp className="h-8 w-8 text-blue-600" />
-                    <span className="text-blue-600">Guidance</span>
+                    <span className="text-blue-600">Details</span>
                   </>
                 )}
               </div>
@@ -1375,7 +1561,7 @@ const interviewerFocus = getInterviewerFocus(currentQuestion ?? null, {
                   </span>
                   <span className="flex items-center gap-1 text-foreground">
                     <ArrowUp className="h-3 w-3" />
-                    Swipe up for guidance
+                    Swipe up for details
                   </span>
                   <button
                     type="button"
@@ -1469,71 +1655,79 @@ const interviewerFocus = getInterviewerFocus(currentQuestion ?? null, {
                     <Brain className="h-5 w-5 text-primary" />
                   </div>
 
-                  {interviewerFocus.summary && (
-                    <p className="leading-relaxed text-foreground">
-                      {interviewerFocus.summary}
+                  {!detailsExpanded && (
+                    <p className="text-xs text-muted-foreground">
+                      Detailed rationale is hidden. Tap “Show details” or swipe up to review interviewer context and follow-up prompts.
                     </p>
                   )}
 
-                  {interviewerFocus.criteria.length > 0 && (
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">
-                        Signals to hit
-                      </p>
-                      <ul className="space-y-1 text-foreground">
-                        {interviewerFocus.criteria.map((criterion, index) => (
-                          <li key={`${criterion}-${index}`} className="flex items-start gap-2">
-                            <span className="text-primary mt-1">•</span>
-                            <span>{criterion}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
+                  {detailsExpanded && (
+                    <>
+                      {interviewerFocus.summary && (
+                        <p className="leading-relaxed text-foreground">
+                          {interviewerFocus.summary}
+                        </p>
+                      )}
 
-                  {(interviewerFocus.answerApproach || interviewerFocus.followUps.length > 0) && (
-                    <div className="rounded-lg border border-dashed border-primary/30 bg-background/60 p-3">
-                      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-                        <span>Swipe up or tap to view deeper guidance</span>
-                        <button
-                          type="button"
-                          onClick={() => setShowGuidance(prev => !prev)}
-                          className="font-medium text-primary underline-offset-2 hover:underline"
-                        >
-                          {showGuidance ? 'Hide details' : 'Show details'}
-                        </button>
-                      </div>
-
-                      {showGuidance && (
-                        <div className="space-y-3 pt-3 text-sm">
-                          {interviewerFocus.answerApproach && (
-                            <div>
-                              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">
-                                Answer approach
-                              </p>
-                              <p>{interviewerFocus.answerApproach}</p>
-                            </div>
-                          )}
-
-                          {interviewerFocus.followUps.length > 0 && (
-                            <div>
-                              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">
-                                Possible follow-ups
-                              </p>
-                              <ul className="space-y-1">
-                                {interviewerFocus.followUps.map((followUp, index) => (
-                                  <li key={`${followUp}-${index}`} className="flex items-start gap-2">
-                                    <span className="text-muted-foreground mt-1">•</span>
-                                    <span>{followUp}</span>
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
+                      {interviewerFocus.criteria.length > 0 && (
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">
+                            Signals to hit
+                          </p>
+                          <ul className="space-y-1 text-foreground">
+                            {interviewerFocus.criteria.map((criterion, index) => (
+                              <li key={`${criterion}-${index}`} className="flex items-start gap-2">
+                                <span className="text-primary mt-1">•</span>
+                                <span>{criterion}</span>
+                              </li>
+                            ))}
+                          </ul>
                         </div>
                       )}
-                    </div>
+
+                      {(interviewerFocus.answerApproach || interviewerFocus.followUps.length > 0) && (
+                        <div className="rounded-lg border border-dashed border-primary/30 bg-background/60 p-3">
+                          <div className="space-y-3 text-sm">
+                            {interviewerFocus.answerApproach && (
+                              <div>
+                                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">
+                                  Answer approach
+                                </p>
+                                <p>{interviewerFocus.answerApproach}</p>
+                              </div>
+                            )}
+
+                            {interviewerFocus.followUps.length > 0 && (
+                              <div>
+                                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">
+                                  Possible follow-ups
+                                </p>
+                                <ul className="space-y-1">
+                                  {interviewerFocus.followUps.map((followUp, index) => (
+                                    <li key={`${followUp}-${index}`} className="flex items-start gap-2">
+                                      <span className="text-muted-foreground mt-1">•</span>
+                                      <span>{followUp}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </>
                   )}
+
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                    <span>Swipe up or tap to {detailsExpanded ? 'hide' : 'view'} question details</span>
+                    <button
+                      type="button"
+                      onClick={() => setDetailsExpanded(prev => !prev)}
+                      className="font-medium text-primary underline-offset-2 hover:underline"
+                    >
+                      {detailsExpanded ? 'Hide details' : 'Show details'}
+                    </button>
+                  </div>
                 </div>
               )}
             </CardHeader>
@@ -1542,7 +1736,12 @@ const interviewerFocus = getInterviewerFocus(currentQuestion ?? null, {
               {/* Voice Recording Section - PRIORITIZED */}
               <div className="bg-gradient-to-r from-primary/5 to-primary/10 rounded-lg p-4 space-y-3">
                 <div className="flex items-center justify-between">
-                  <h3 className="font-medium text-sm">Voice Answer (Recommended)</h3>
+                  <div>
+                    <h3 className="font-medium text-sm">Voice Answer (Local preview only)</h3>
+                    <p className="text-xs text-muted-foreground">
+                      Audio stays on this device until uploads ship.
+                    </p>
+                  </div>
                   {isRecording && (
                     <div className="flex items-center gap-2 text-sm text-red-600">
                       <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>

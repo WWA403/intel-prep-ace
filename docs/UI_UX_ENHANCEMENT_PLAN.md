@@ -44,15 +44,15 @@ Themes were clustered, conflicting recommendations were resolved using standard 
 
 ### 4. Practice Experience
 
-> **Status update (Nov 23, 2025):** Swipe guards, safe-area padding, 12 px nav dots, and clarified swipe hints shipped in commit `Improve practice usability gestures`. Remaining focus: stepper setup, voice-recording messaging, and rationale toggles.
+> **Status update (Nov 23, 2025):** Swipe guards, safe-area padding, nav dots, presets/stepper flow, “local preview” voice messaging, and the collapsible details toggle are now live (`Improve practice usability gestures`, `Practice setup stepper`). Practice experience track is considered complete pending future enhancements.
 - **Swipe gestures conflict with scrolling & hints clash with content:** Users trigger actions accidentally and hints overlap.  
   _Action:_ Increase swipe threshold, ignore swipes when vertical scroll > certain delta, and move hints into a dismissible banner shown on the first card only.
 - **Bottom navigation overlays question cards on mobile:** Sticky bar hides input fields.  
   _Action:_ Add `pb-24` to the scroll container, make the nav non-sticky below `md`, and enlarge question dots to ≥ 12px touch targets.
 - **Setup wizard overwhelm:** Filters, stages, and difficulties all appear simultaneously.  
-  _Action:_ Convert to a stepper (Goal → Stages → Filters → Review) with presets (“Quick practice”, “Deep dive”) and remembered defaults.
+  _Action:_ Convert to a stepper (Goal → Stages → Filters → Review) with presets (“Quick practice”, “Deep dive”) and remembered defaults. _(Shipped Nov 23, 2025)_
 - **Voice recording + guidance honesty:** UI implies saving audio and always exposes detailed rationale.  
-  _Action:_ Label recording as “Local preview only” until upload works and collapse rationale/company context behind a “Show details” toggle.
+  _Action:_ Label recording as “Local preview only” until upload works and collapse rationale/company context behind a “Show details” toggle. _(Shipped Nov 23, 2025)_
 
 ### 5. Accessibility & Responsiveness
 - **Keyboard, ARIA, and contrast gaps:** Icon-only buttons lack labels, focus states are subtle, and muted text may fail WCAG.  
@@ -90,7 +90,7 @@ Themes were clustered, conflicting recommendations were resolved using standard 
 | **P1** (High) | Forms & Uploads | Progressive disclosure for research form, disable “Upload PDF” until ready, add validation feedback | 3 dev days | Frontend |
 | **P1** (High) | History & IA | Ship cross-page history sheet, rename search selector, improve dashboard empty state | 3-4 dev days | Frontend |
 | **P1** (High) | Accessibility | Define z-index scale, add ARIA labels and focus styles, enforce touch target sizing | 2 dev days | Frontend |
-| **P2** (Medium) | Practice setup & guidance | Introduce presets/stepper, clarify voice recording limitations, collapse rationale details | 1 week | Frontend + Design |
+| **P2** (Medium) | Practice setup & guidance (✅ shipped Nov 23) | Introduce presets/stepper, clarify voice recording limitations, collapse rationale details | 1 week | Frontend + Design |
 | **P2** (Medium) | Feedback consistency | Shared loading/success patterns, error recovery CTAs, autosave session notes | 1 week | Frontend |
 | **P3** (Low) | Visual polish | Standardize spacing, button sizes, progress components, and status badges | Ongoing | Design System |
 
