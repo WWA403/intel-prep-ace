@@ -102,7 +102,7 @@ All documentation now lives in a single navigation surface so you don't need to 
 ### 🎯 Status Snapshot
 - ✅ Research pipeline + synthesis rewrite deployed (see `docs/RESEARCH_PIPELINE_IMPROVEMENTS.md`).
 - ✅ Practice usability refinements (swipe guard, safe-area padding, nav dots) shipped per `Improve practice usability gestures` commit.
-- ✅ Practice setup stepper, presets, voice-recording messaging, and details toggle shipped to close out remaining usability gaps.
+- ✅ Practice setup stepper, presets, voice-recording messaging, and a lightweight interviewer hint shipped; richer hint UX/content deferred for a future iteration.
 - ⚠️ UI/UX regressions tracked in `docs/UI_UX_ENHANCEMENT_PLAN.md` block critical onboarding and practice flows.
 - ⚙️ Supabase + Edge Functions ready; need final migration + redeploy before reopening sign-ups.
 - 🚧 Audio transcription and analytics remain outside MVP scope but stay on deck.
@@ -116,7 +116,7 @@ All documentation now lives in a single navigation surface so you don't need to 
 | **P1** | History & IA Refresh | Rename search selector to “Active Research,” add helper text + empty states, ship cross-page history sheet. | Frontend | `docs/UI_UX_ENHANCEMENT_PLAN.md#3-navigation--information-architecture` |
 | **P1** | Accessibility & Safe Areas | Define z-index scale (nav 40/dialog 80/toast 100), add aria-labels + stronger focus rings, enforce 44 px touch targets + safe-area padding. | Frontend | `docs/UI_UX_ENHANCEMENT_PLAN.md#5-accessibility--responsiveness` |
 | **P1** | Research Pipeline Adoption | Configure `OPENAI_MODEL` secrets, remove temp params, monitor question depth (30–50) + tailoring via new question-first prompt. | Backend | `docs/RESEARCH_PIPELINE_IMPROVEMENTS.md` |
-| **P2** | Practice Setup & Guidance (✅ shipped Nov 23) | Convert filters to stepper with presets, clarify voice recording limitations, collapse rationale behind toggle. | Frontend + Design | `docs/UI_UX_ENHANCEMENT_PLAN.md#4-practice-experience` |
+| **P2** | Practice Setup & Guidance (✅ shipped Nov 23) | Convert filters to stepper with presets, clarify voice recording limitations, collapse rationale behind toggle; hint kept intentionally simple until we revisit the UX. | Frontend + Design | `docs/UI_UX_ENHANCEMENT_PLAN.md#4-practice-experience` |
 | **P2** | Feedback & Status Consistency | Shared loading pattern (skeletons + progress dialog), inline success states for saves, autosave notes w/ debounce + error CTAs. | Frontend | `docs/UI_UX_ENHANCEMENT_PLAN.md#6-feedback--status-communication` |
 | **P3** | Visual Polish & Systemization | Standardize spacing, button sizing, progress + badge variants; fold into design system hygiene. | Design System | `docs/UI_UX_ENHANCEMENT_PLAN.md#prioritized-backlog` |
 

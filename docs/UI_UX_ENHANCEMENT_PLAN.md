@@ -44,7 +44,7 @@ Themes were clustered, conflicting recommendations were resolved using standard 
 
 ### 4. Practice Experience
 
-> **Status update (Nov 23, 2025):** Swipe guards, safe-area padding, nav dots, presets/stepper flow, “local preview” voice messaging, and the collapsible details toggle are now live (`Improve practice usability gestures`, `Practice setup stepper`). Practice experience track is considered complete pending future enhancements.
+> **Status update (Nov 23, 2025):** Swipe guards, safe-area padding, nav dots, presets/stepper flow, “local preview” voice messaging, and a streamlined interviewer hint strip are now live (`Improve practice usability gestures`, `Practice setup stepper`, `Simplify interviewer focus banner`). Practice experience track is considered complete pending future enhancements. The hint is intentionally lightweight for the MVP; richer UI/UX/content can be revisited when capacity allows.
 - **Swipe gestures conflict with scrolling & hints clash with content:** Users trigger actions accidentally and hints overlap.  
   _Action:_ Increase swipe threshold, ignore swipes when vertical scroll > certain delta, and move hints into a dismissible banner shown on the first card only.
 - **Bottom navigation overlays question cards on mobile:** Sticky bar hides input fields.  
