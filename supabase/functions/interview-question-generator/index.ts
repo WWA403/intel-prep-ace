@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.43.2";
+import { getOpenAIModel } from "../_shared/config.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -129,15 +130,21 @@ async function generateInterviewQuestions(
     questionContext += `Experience Level: ${experienceLevel.toUpperCase()} - Adjust question difficulty and quantity accordingly\n`;
   }
   
-  // Add specific guidance based on experience level - SAME VOLUME, DIFFERENT COMPLEXITY
-  questionContext += `\nTARGET: Generate 18-22 questions per category for TOTAL 120-150 questions regardless of experience level.\n`;
+  // Focus on QUALITY over QUANTITY - generate fewer but highly tailored questions
+  questionContext += `\nTARGET: Generate 5-8 HIGHLY TAILORED questions per category for TOTAL 30-50 questions.\n`;
+  questionContext += `CRITICAL: Each question MUST be deeply tailored to:\n`;
+  questionContext += `  - The candidate's specific background (work history, projects, achievements)\n`;
+  questionContext += `  - The specific job requirements and responsibilities\n`;
+  questionContext += `  - The company's culture, values, and interview philosophy\n`;
+  questionContext += `  - Real interview questions extracted from candidate reports\n`;
+  questionContext += `\nQUALITY OVER QUANTITY: Better to have 30 highly relevant, tailored questions than 100 generic ones.\n`;
   
   if (experienceLevel === 'junior') {
-    questionContext += `\nFOCUS FOR JUNIOR CANDIDATE: Fundamentals, learning ability, potential, adaptability. Questions should focus on basic concepts, learning scenarios, and growth mindset.\n`;
+    questionContext += `\nFOCUS FOR JUNIOR CANDIDATE: Fundamentals, learning ability, potential, adaptability. Questions should focus on basic concepts, learning scenarios, and growth mindset. Reference specific projects or experiences from the candidate's background.\n`;
   } else if (experienceLevel === 'mid') {
-    questionContext += `\nFOCUS FOR MID-LEVEL CANDIDATE: Execution, problem-solving, leadership potential, project management. Questions should focus on project ownership, technical depth, and team collaboration.\n`;
+    questionContext += `\nFOCUS FOR MID-LEVEL CANDIDATE: Execution, problem-solving, leadership potential, project management. Questions should focus on project ownership, technical depth, and team collaboration. Reference specific achievements and responsibilities from the candidate's work history.\n`;
   } else {
-    questionContext += `\nFOCUS FOR SENIOR CANDIDATE: Strategic thinking, mentorship, complex problem-solving, system design, team leadership. Questions should focus on architecture, business impact, and organizational influence.\n`;
+    questionContext += `\nFOCUS FOR SENIOR CANDIDATE: Strategic thinking, mentorship, complex problem-solving, system design, team leadership. Questions should focus on architecture, business impact, and organizational influence. Reference specific leadership experiences and strategic projects from the candidate's background.\n`;
   }
 
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -147,47 +154,56 @@ async function generateInterviewQuestions(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'gpt-4o',
+      model: getOpenAIModel('questionGeneration'),
       messages: [
         {
           role: 'system',
-          content: `You are an expert interview preparation specialist with deep knowledge of hiring practices across major companies. Generate comprehensive, realistic interview questions based on the provided context.
+          content: `You are an expert interview preparation specialist with deep knowledge of hiring practices across major companies. Generate HIGHLY TAILORED, realistic interview questions based on the provided context.
 
-Focus on:
-1. RESEARCH-FIRST APPROACH: Prioritize questions derived from actual company interview experiences and research
-2. CONSISTENT VOLUME: Generate 18-22 questions per category (120-150 total) regardless of experience level
-3. ADAPTIVE COMPLEXITY: Same volume but different complexity/focus based on candidate's experience level
-4. COMPANY-SPECIFIC: At least 60% of questions must reference company-specific information, culture, or research findings
-5. REAL QUESTIONS: Use actual questions from interview reviews when available, then generate variations
-6. STAGE-APPROPRIATE: Questions must align with the specific interview stage and interviewer type
-7. EXPERIENCE-MATCHED: Question complexity and focus must match candidate's experience level
+CRITICAL FOCUS: QUALITY OVER QUANTITY
+- Generate 5-8 questions per category (30-50 total) that are DEEPLY TAILORED
+- Each question MUST reference specific details from the candidate's background, job requirements, or company research
+- Better to have 30 highly relevant questions than 100 generic ones
 
 MANDATORY REQUIREMENTS:
-- TOTAL: 120-150 questions across all categories (consistent for all experience levels)
-- RESEARCH INTEGRATION: Use actual questions from company research as foundation
-- QUESTION DIVERSITY: Include situational, behavioral, technical, and company-specific variations
-- COMPLEXITY ADAPTATION: Adjust question sophistication to match experience level, not quantity
+1. RESEARCH-FIRST APPROACH: Prioritize questions derived from actual company interview experiences and research
+2. DEEP TAILORING: 100% of questions must reference specific details:
+   - Candidate's specific work history, projects, or achievements
+   - Specific job responsibilities and requirements
+   - Company-specific information, culture, or research findings
+   - Real interview questions extracted from candidate reports
+3. ADAPTIVE COMPLEXITY: Adjust question complexity based on candidate's experience level
+4. REAL QUESTIONS: Use actual questions from interview reviews as foundation, then create tailored variations
+5. STAGE-APPROPRIATE: Questions must align with the specific interview stage and interviewer type
+6. EXPERIENCE-MATCHED: Question complexity and focus must match candidate's experience level
+
+TARGET VOLUME:
+- TOTAL: 30-50 questions across all categories (5-8 per category)
+- Focus on QUALITY and TAILORING, not quantity
+- Each question should be unique and highly relevant
 
 For each question, provide:
-- The specific question
+- The specific question (MUST reference specific details from context)
 - Question type and difficulty (adjust difficulty based on candidate experience)
-- Rationale for why this question would be asked
+- Rationale for why this question would be asked (reference specific company/job/CV details)
 - Suggested answer approach
 - Evaluation criteria interviewers would use
 - Potential follow-up questions
 - Whether it's suitable for STAR method
-- Company-specific context
+- Company-specific context (MUST include specific company details)
 
 CRITICAL REQUIREMENTS - STRICTLY ENFORCE:
-- CONSISTENT VOLUME: Generate 18-22 questions per category for ALL experience levels (120-150 total)
-- RESEARCH-DRIVEN: If company research contains actual interview questions, use them as foundation and generate variations
-- EXPERIENCE ADAPTATION: Adjust question complexity and focus, NOT quantity:
-  * Junior (0-2 years): Focus on fundamentals, learning scenarios, basic problem-solving
-  * Mid-level (3-7 years): Focus on project ownership, technical depth, team collaboration  
-  * Senior (8+ years): Focus on strategy, architecture, organizational impact
-- COMPANY CONTEXT: 60%+ of questions must reference specific company information, culture, or research findings
-- QUALITY DISTRIBUTION: 30% Easy, 50% Medium, 20% Hard (adjust complexity based on experience level)
-- NO SHORTCUTS: Generate the full 120-150 questions with proper research integration
+- DEEP TAILORING: Every question must reference specific details from:
+  * Candidate's work history, projects, achievements, or skills
+  * Job responsibilities, requirements, or qualifications
+  * Company culture, values, interview philosophy, or real interview questions
+- RESEARCH-DRIVEN: If company research contains actual interview questions, use them as foundation and create tailored variations
+- EXPERIENCE ADAPTATION: Adjust question complexity and focus:
+  * Junior (0-2 years): Focus on fundamentals, learning scenarios, basic problem-solving - reference their projects/education
+  * Mid-level (3-7 years): Focus on project ownership, technical depth, team collaboration - reference their work achievements
+  * Senior (8+ years): Focus on strategy, architecture, organizational impact - reference their leadership experiences
+- NO GENERIC QUESTIONS: Every question must be specific and tailored. Generic questions like "Tell me about yourself" are FORBIDDEN unless tailored to the specific context
+- QUALITY DISTRIBUTION: 20% Easy, 50% Medium, 30% Hard (adjust complexity based on experience level)
 
 You MUST return ONLY valid JSON in this exact structure - no markdown, no additional text:
 
@@ -290,8 +306,8 @@ You MUST return ONLY valid JSON in this exact structure - no markdown, no additi
           content: `Generate comprehensive interview questions based on this context:\n\n${questionContext}`
         }
       ],
-      max_tokens: 12000,
-      temperature: 0.7,
+      max_tokens: 6000,  // Increased from 3000, using getMaxTokens would be better but this works
+      response_format: { type: "json_object" }  // Ensure JSON output
     }),
   });
 

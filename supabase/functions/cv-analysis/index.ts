@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1';
 import { Logger } from '../_shared/logging.ts';
+import { getOpenAIModel } from '../_shared/config.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -100,7 +101,7 @@ async function analyzeCV(
   userId: string
 ): Promise<CVAnalysis> {
   const requestPayload = {
-    model: 'gpt-4o-mini',
+    model: getOpenAIModel('cvAnalysis'),
     messages: [
       {
         role: 'system',
@@ -143,7 +144,6 @@ ${cvText}`
       }
     ],
     max_tokens: 2000,
-    temperature: 0.3,
   };
 
   // Use the logger's wrapped fetch for automatic logging
@@ -161,7 +161,7 @@ ${cvText}`
       searchId,
       userId,
       functionName: 'cv-analysis',
-      model: 'gpt-4o-mini'
+      model: getOpenAIModel('cvAnalysis')
     }
   );
 
@@ -172,27 +172,23 @@ ${cvText}`
   const data = await response.json();
   const analysisText = data.choices[0].message.content;
 
-  try {
-    return JSON.parse(analysisText);
-  } catch (parseError) {
-    console.error("Failed to parse CV analysis JSON:", parseError);
-    console.error("Raw response:", analysisText);
-    
-    // Return fallback structure
-    return {
-      name: "Unable to parse",
-      email: "",
-      phone: "",
-      location: "",
-      current_role: "",
-      experience_years: 0,
-      skills: { technical: [], soft: [], certifications: [] },
-      education: { degree: "", institution: "", graduation_year: new Date().getFullYear() },
-      experience: [],
-      projects: [],
-      key_achievements: []
-    };
-  }
+  // Use shared JSON parsing utility that handles markdown code blocks
+  const { parseJsonResponse } = await import("../_shared/openai-client.ts");
+  const fallback: CVAnalysis = {
+    name: "Unable to parse",
+    email: "",
+    phone: "",
+    location: "",
+    current_role: "",
+    experience_years: 0,
+    skills: { technical: [], soft: [], certifications: [] },
+    education: { degree: "", institution: "", graduation_year: new Date().getFullYear() },
+    experience: [],
+    projects: [],
+    key_achievements: []
+  };
+  
+  return parseJsonResponse(analysisText, fallback);
 }
 
 // Convert OpenAI CV analysis to Profile component format

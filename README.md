@@ -1,4 +1,4 @@
-# INT - Interview Prep Tool 🎯
+# Hireo - Interview Prep Tool 🎯
 
 A modern, AI-powered interview preparation tool that helps small circles of friends and colleagues quickly learn how target companies run their interviews and prepare effectively.
 
@@ -41,6 +41,53 @@ A modern, AI-powered interview preparation tool that helps small circles of frie
 - Secure authentication and data protection
 - Full CV management with intelligent parsing
 
+## 📚 Documentation Hub
+
+All documentation now lives in a single navigation surface so you don't need to jump into `docs/README.md` anymore.
+
+| Document | Why you need it | Notes |
+|----------|-----------------|-------|
+| [`CLAUDE.md`](./CLAUDE.md) | End-to-end developer playbook | Start here for architecture, commands, and workflows. |
+| [`docs/OPTION_B_REDESIGN_COMPLETE.md`](./docs/OPTION_B_REDESIGN_COMPLETE.md) | Deep dive on the November 2025 redesign | Includes diagrams, decision records, and migration details. |
+| [`docs/DEPLOYMENT_GUIDE.md`](./docs/DEPLOYMENT_GUIDE.md) | Deploying to Supabase (DB + Edge Functions) | Step-by-step instructions with troubleshooting. |
+| [`docs/RESEARCH_PIPELINE_IMPROVEMENTS.md`](./docs/RESEARCH_PIPELINE_IMPROVEMENTS.md) | Pipeline optimization backlog | Use for planning perf work. |
+| [`docs/UI_UX_ENHANCEMENT_PLAN.md`](./docs/UI_UX_ENHANCEMENT_PLAN.md) | Design backlog and heuristics | Reference when shipping UI polish. |
+
+### Role-Based Fast Track
+- **Developers:** Read `OPTION_B_REDESIGN_COMPLETE.md`, inspect `supabase/functions/interview-research/index.ts`, then follow `CLAUDE.md` commands.
+- **Operations/DevOps:** Follow `docs/DEPLOYMENT_GUIDE.md` in order: DB migration → Edge Functions → smoke tests → monitoring.
+- **Product & Stakeholders:** Skim the Option B summary below plus the UI/UX plan for roadmap context.
+
+### Key Files to Know
+- `supabase/functions/interview-research/index.ts` – unified synthesis function (Option B).
+- `supabase/migrations/20251116_redesign_option_b_search_artifacts.sql` – creates `search_artifacts` with indexes + RLS.
+- `src/services/searchService.ts` – frontend gateway that now reads from `search_artifacts`.
+
+## 🆕 Option B Redesign Snapshot (Nov 2025)
+
+The new pipeline (Option B) eliminates the old cv-job-comparison microservice in favor of a single, timeout-protected synthesis path that stores every artifact immediately.
+
+| Metric | Before | After | Delta |
+|--------|--------|-------|-------|
+| Database ops per search | 126–157 | 5–7 | 97% fewer |
+| Database write time | 30–180+ sec | < 3 sec | 97% faster |
+| Failure points | 6+ | 2–3 | 97% fewer |
+| Data retention | Partial | 100% | Full raw data saved |
+| Reliability | 85% | 99%+ | +16 pts |
+
+**Key architectural highlights**
+- Raw data lands in `search_artifacts` instantly, so retries can reuse prior work.
+- Unified OpenAI call produces stages, STAR stories, gap analysis, and ~140 questions at once.
+- Consistent timeout helpers around every DB call prevent zombie writes.
+- Frontend now consumes a single artifact payload, simplifying query logic.
+
+### Deployment Status
+- ✅ Code updates merged to `dev-q`.
+- ✅ Documentation refreshed (this README + Option B deep dive).
+- ⏳ Supabase migration deployment pending (`20251116_redesign_option_b_search_artifacts.sql`).
+- ⏳ Edge Function redeploy pending (`interview-research`).
+- ⏳ Full system QA + monitoring pass pending after rollout.
+
 ## 🚀 Quick Start
 
 ### Prerequisites
@@ -50,9 +97,11 @@ A modern, AI-powered interview preparation tool that helps small circles of frie
 
 ### Getting Started
 
-1. **Visit the App**
+1. **Run the App Locally**
    ```
-   https://lovable.dev/projects/f6161025-31dc-4404-8dea-263c660d8616
+   npm install
+   npm run dev
+   # Then browse http://localhost:5173
    ```
 
 2. **Create Account**
@@ -63,13 +112,57 @@ A modern, AI-powered interview preparation tool that helps small circles of frie
    - Enter a company name (e.g., "Google", "Meta", "Stripe")
    - Optionally add role and location details
    - Upload your CV for personalized insights
-   - Click "Run Intel" and wait for AI research
+   - Click "Start Research" and wait for AI research
+   - Note: Code Assistant can connect to Supabase via MCP and run read queries directly if you need to validate data during troubleshooting.
 
 4. **Review & Practice**
    - Explore the generated interview stages
    - Read targeted preparation guidance
    - Practice with company-specific questions
    - Save results for future reference
+
+## 📋 MVP Status & Development Backlog
+
+> **Last Updated:** November 23, 2025  
+> **Current MVP Completion:** ~86% (Option B shipped; UI polish + research QA outstanding)
+
+### 🎯 Status Snapshot
+- ✅ Option B research pipeline + synthesis rewrite deployed (see `docs/RESEARCH_PIPELINE_IMPROVEMENTS.md`).
+- ⚠️ UI/UX regressions tracked in `docs/UI_UX_ENHANCEMENT_PLAN.md` block critical onboarding and practice flows.
+- ⚙️ Supabase + Edge Functions ready; need final migration + redeploy before reopening sign-ups.
+- 🚧 Audio transcription and analytics remain outside MVP scope but stay on deck.
+
+### 🚦 Priority Board (Next 2 Sprints)
+| Priority | Initiative | High-Level Goal | Owner | Reference |
+| --- | --- | --- | --- | --- |
+| **P0** | Rendering & Access Hardening | Fix global glyph bug, gate Hireo landing for logged-out users, always show lightweight nav, surface redirect context. | Frontend | `docs/UI_UX_ENHANCEMENT_PLAN.md#1-access-onboarding--communication` |
+| **P0** | Practice Usability | Increase swipe thresholds, add bottom padding below sticky nav, enlarge nav dots ≥12 px, fix hint overlap. | Frontend | `docs/UI_UX_ENHANCEMENT_PLAN.md#4-practice-experience` |
+| **P1** | Forms & Uploads Slimdown | Split research form into required/advanced accordions, add inline validation + counters, disable CV upload until storage ships. | Frontend | `docs/UI_UX_ENHANCEMENT_PLAN.md#2-copy-typography--form-inputs` |
+| **P1** | History & IA Refresh | Rename search selector to “Active Research,” add helper text + empty states, ship cross-page history sheet. | Frontend | `docs/UI_UX_ENHANCEMENT_PLAN.md#3-navigation--information-architecture` |
+| **P1** | Accessibility & Safe Areas | Define z-index scale (nav 40/dialog 80/toast 100), add aria-labels + stronger focus rings, enforce 44 px touch targets + safe-area padding. | Frontend | `docs/UI_UX_ENHANCEMENT_PLAN.md#5-accessibility--responsiveness` |
+| **P1** | Research Pipeline Adoption | Configure `OPENAI_MODEL` secrets, remove temp params, monitor question depth (30–50) + tailoring via new question-first prompt. | Backend | `docs/RESEARCH_PIPELINE_IMPROVEMENTS.md` |
+| **P2** | Practice Setup & Guidance | Convert filters to stepper with presets, clarify voice recording limitations, collapse rationale behind toggle. | Frontend + Design | `docs/UI_UX_ENHANCEMENT_PLAN.md#4-practice-experience` |
+| **P2** | Feedback & Status Consistency | Shared loading pattern (skeletons + progress dialog), inline success states for saves, autosave notes w/ debounce + error CTAs. | Frontend | `docs/UI_UX_ENHANCEMENT_PLAN.md#6-feedback--status-communication` |
+| **P3** | Visual Polish & Systemization | Standardize spacing, button sizing, progress + badge variants; fold into design system hygiene. | Design System | `docs/UI_UX_ENHANCEMENT_PLAN.md#prioritized-backlog` |
+
+### 🧪 Research Pipeline Follow-Ups
+- **P0:** Set `OPENAI_MODEL` secret to `gpt-5-nano` (or desired default) before redeploying `interview-research`; confirm Edge Functions read new env vars.
+- **P1:** Run end-to-end research smoke tests to verify 30–50 deeply tailored questions, per `docs/RESEARCH_PIPELINE_IMPROVEMENTS.md` testing checklist.
+- **P1:** Monitor logs for GPT-5 temperature warnings (should be gone) and ensure question-first prompt generates real-question variations.
+- **P2:** Backfill analytics that compare question quality pre/post rewrite to quantify lift.
+
+### ⚡ Quick Wins (≤ 1 Week)
+- Re-enable Tailwind `font-sans` stack, smoke-test Hireo auth copy.
+- Always render nav (Logo + Docs + Support + Sign in) regardless of auth state.
+- Gate Hireo form with inline auth prompt + sample data card.
+- Disable CV upload (“Coming Soon”) with privacy copy describing roadmap.
+- Increase practice nav dots to 12 px and add `pb-24` (plus safe-area inset) under sticky nav.
+- Add redirect-aware banner on `/auth` (“Sign in to resume Practice”).
+
+### 📚 Historical Context
+- Completed epics (seniority personalization, sampler, favorites, swipe gestures) now live inside the product; see `docs/IMPLEMENTATION_CHANGES.md` for deep dives.
+- Option B architectural notes remain in `docs/OPTION_B_REDESIGN_COMPLETE.md`.
+- Audio transcription, timer presets, analytics dashboards stay parked until the above priorities land.
 
 ## 🏗️ Architecture
 
@@ -208,6 +301,194 @@ The app uses a sophisticated microservices architecture with four specialized Ed
 - **Performance Optimized:** Parallel processing and efficient API usage
 - **Security:** All API keys securely stored in Supabase secrets
 
+### 🔄 Interview Research Pipeline (Critical Flow)
+
+The interview research system operates in three distinct stages:
+
+#### **Stage 1: Concurrent Data Gathering** (~20 seconds)
+```
+┌─────────────────────────────────────────────────────────┐
+│         CONCURRENT PARALLEL EXECUTION                    │
+├─────────────────────────────────────────────────────────┤
+│                                                          │
+│  ┌─────────────────┐  ┌──────────────────┐  ┌────────┐ │
+│  │ Company Research│  │  Job Analysis    │  │CV Parse│ │
+│  │                 │  │                  │  │        │ │
+│  │ • Tavily search │  │ • Extract URLs   │  │ • Parse│ │
+│  │ • AI Analysis*  │  │ • AI Parsing*    │  │resume  │ │
+│  │                 │  │                  │  │        │ │
+│  │ ~18-20s         │  │ ~18-20s          │  │ ~12-15s│ │
+│  └────────┬────────┘  └────────┬─────────┘  └───┬────┘ │
+│           │                    │                 │       │
+└───────────┼────────────────────┼─────────────────┼──────┘
+            │                    │                 │
+            └────────────────────┴─────────────────┘
+                         ↓
+            Returns: CompanyInsights + JobRequirements + CVAnalysis
+            Stores: scraped_urls (cached content), tavily_searches (logs)
+```
+
+**Functions Called:**
+- `company-research`: Searches Tavily for interview data, analyzes with OpenAI
+- `job-analysis`: Extracts and parses job description from provided URLs
+- `cv-analysis`: Parses resume for skills and experience
+
+**Important**: These functions perform initial AI analysis on their respective domains (company insights, job requirements parsing). Raw research data is not persisted separately—results are structurally analyzed immediately.
+
+---
+
+#### **Stage 2: AI Synthesis** (~8-15 seconds)
+
+```
+┌──────────────────────────────────────────────────────┐
+│     UNIFIED SYNTHESIS (Single AI Call)               │
+├──────────────────────────────────────────────────────┤
+│                                                      │
+│  Input: CompanyInsights + JobRequirements + CV     │
+│         ↓                                            │
+│  OpenAI GPT-4o generates:                          │
+│  ├─ Interview Stages (4-6 stages from research)   │
+│  ├─ Personalized Guidance (role-specific tips)    │
+│  ├─ Preparation Timeline (day-by-day schedule)    │
+│  └─ Overall Fit Assessment                        │
+│                                                      │
+│  Output: AIResearchOutput JSON                     │
+│                                                      │
+│  ~8-15s total                                       │
+└──────────────────┬───────────────────────────────────┘
+                   ↓
+         Stores: interview_stages table
+         (4-6 rows, one per interview stage)
+```
+
+**Key Detail**: Interview stages are sourced from company research results. If Tavily extraction found the actual interview process from candidate reports, those stages are used directly. Otherwise, AI generates generic stages based on company/role.
+
+---
+
+#### **Stage 3: Parallel Post-Processing** (~10-25 seconds)
+
+```
+┌──────────────────────────────────────────────────────┐
+│    TWO PARALLEL OPERATIONS (no dependencies)         │
+├──────────────────────────────────────────────────────┤
+│                                                      │
+│  ┌──────────────────┐      ┌──────────────────────┐│
+│  │ CV-Job Analysis  │      │ Question Generation  ││
+│  │                  │      │                      ││
+│  │ • Skill gaps     │      │ Per Interview Stage: ││
+│  │ • Experience gaps│      │ • Behavioral Qs      ││
+│  │ • Fit assessment │      │ • Technical Qs       ││
+│  │ • Prep strategy  │      │ • Situational Qs     ││
+│  │                  │      │ • Company-specific   ││
+│  │ ~5-10s           │      │ • Role-specific      ││
+│  │                  │      │ • Experience-based   ││
+│  └────────┬─────────┘      │ • Cultural fit       ││
+│           │                │                      ││
+│           │                │ Total: 120-150 Qs   ││
+│           │                │ ~10-20s (per stage) ││
+│           │                └────────┬─────────────┘│
+│           │                         │              │
+└───────────┼─────────────────────────┼──────────────┘
+            │                         │
+            └─────────────┬───────────┘
+                          ↓
+           Stores: cv_job_comparisons table
+                  interview_questions table
+                  (120-150 question rows)
+```
+
+**Functions Called:**
+- `cv-job-comparison`: Analyzes CV against job requirements, generates prep strategy
+- `interview-question-generator`: Generates categorized questions for each interview stage
+
+**Critical Note**: These operations run in parallel—not sequentially. They don't depend on each other, only on Stage 1 data.
+
+---
+
+#### **Stage 4: Database Finalization** (~5-10 seconds)
+
+```
+Insert all collected data into database:
+├─ interview_stages (4-6 rows from synthesis)
+├─ interview_questions (120-150 rows, organized by stage)
+├─ cv_job_comparisons (1 row, comprehensive analysis)
+├─ resumes (1 row, parsed CV data)
+└─ searches (update status to 'completed')
+```
+
+---
+
+### Complete Pipeline Summary
+
+| Stage | Duration | Operation | Output |
+|-------|----------|-----------|--------|
+| **1. Gather** | ~20s | Parallel: company research, job analysis, CV parsing | CompanyInsights, JobRequirements, CVAnalysis |
+| **2. Synthesize** | ~8-15s | Single OpenAI call combining all data | AIResearchOutput (interview stages + guidance) |
+| **3. Analyze** | ~10-25s | Parallel: CV-job comparison + question generation | Comparison + 120-150 questions |
+| **4. Store** | ~5-10s | Batch insert all data | Complete database records |
+| **TOTAL** | **50-80s** | All stages execute with optimal parallelization | Full interview preparation package |
+
+---
+
+### Data Flow Diagram
+
+```
+User Input
+└─ Company, Role, CV, Target Seniority
+    ↓
+┌─────────────────────────────────────────┐
+│  Stage 1: Concurrent Gathering (20s)   │
+│  ├─ Company Research (Tavily + AI)     │
+│  ├─ Job Analysis (URL extraction)      │
+│  └─ CV Analysis (resume parsing)       │
+└─────────────┬───────────────────────────┘
+              ↓
+┌─────────────────────────────────────────┐
+│  Stage 2: AI Synthesis (8-15s)          │
+│  └─ OpenAI combines all data            │
+│     → Interview stages structure         │
+│     → Personalized guidance             │
+└─────────────┬───────────────────────────┘
+              ↓
+┌─────────────────────────────────────────┐
+│  Stage 3: Parallel Analysis (10-25s)    │
+│  ├─ CV-Job Comparison                   │
+│  └─ Question Generation (per stage)     │
+└─────────────┬───────────────────────────┘
+              ↓
+┌─────────────────────────────────────────┐
+│  Stage 4: Store Results (5-10s)         │
+│  ├─ Interview stages                    │
+│  ├─ Interview questions (120-150)       │
+│  ├─ CV-job comparison                   │
+│  └─ CV analysis                         │
+└─────────────┬───────────────────────────┘
+              ↓
+         Status: "completed"
+         Frontend displays results
+```
+
+---
+
+### Performance Notes
+
+- **Why so fast?** Stages 1-3 use aggressive parallelization and timeout management
+- **Bottlenecks?** Usually Tavily API (Stage 1) and Question generation (Stage 3)
+- **Configurable?** See [.env.example](.env.example) for timeout and Tavily limits
+- **Adjusting duration?** Reduce `CONCURRENT_TIMEOUTS` in config.ts or `tavily.maxResults` in .env
+
+### Monitoring & Debugging
+
+To monitor a search in progress:
+1. **Frontend**: ProgressDialog shows real-time `progress_step` updates
+2. **Logs**: Check Supabase Functions logs for each stage timing
+3. **Database**: Query `searches` table for `progress_percentage` and `progress_step`
+
+To debug failures:
+1. Check `searches.error_message` for the stage that failed
+2. Review function logs in Supabase Dashboard → Functions → Logs
+3. Verify environment variables are set in Supabase Edge Functions settings
+
 ## 🎯 Usage Examples
 
 ### Basic Company Research
@@ -273,320 +554,24 @@ Per-Search Override:
 
 ---
 
-## 📋 MVP Status & Development Backlog
-
-> **Last Updated:** October 25, 2025  
-> **Current MVP Completion:** ~82% (21/30 core features complete)
-
-### 🎯 PRD vs Implementation Status
-
-#### ✅ **Implemented Features** (75%)
-- Email/password authentication with Supabase
-- Company research with multi-source AI analysis
-- Job description and CV analysis
-- **Seniority-based personalization** (junior/mid/senior) ✨ NEW
-- Interview stages generation (4-6 stages per company)
-- Question generation (120-150 questions per search)
-- **Experience-level adaptation** with smart fallback logic ✨ NEW
-- **Question session sampler** with configurable size (default: 10) ✨ NEW
-- **Favorite & flag questions** (favorite/needs_work/skipped) ✨ NEW
-- Practice mode with filtering by stage/category/difficulty/favorites
-- Voice recording capability
-- Session tracking and answer persistence
-- Real-time research progress tracking
-- Search history and result caching
-
-#### ⚠️ **Partially Implemented** (20%)
-- **Session Summary**: Shows answered count, missing summary page
-- **Location Field**: Country exists, not city-level
-- **Timer**: Running timer exists, no presets (30/60/90s)
-- **Question Quality**: Has confidence scoring, no user rating
-- **Progress Analytics**: No dashboard (planned)
-
-#### 🔴 **Critical Gaps** (5%)
-1. ~~**Seniority-Based Personalization**~~ ✅ **COMPLETED** (Epic 1.1)
-2. ~~**Question Session Sampler**~~ ✅ **COMPLETED** (Epic 1.2)
-3. ~~**Favorite/Flag Questions**~~ ✅ **COMPLETED** (Epic 1.3)
-4. ~~**Swipe/Gesture Interface**~~ ✅ **COMPLETED** (Epic 2.1)
-5. **Audio STT (Speech-to-Text)** - Voice records but doesn't transcribe
-6. **AI Answer Feedback** - Not implemented (out of MVP scope per PRD)
-
----
-
-### 🚀 Development Backlog
-
-#### **PHASE 1: Critical MVP Gaps** (2-3 weeks)
-
-<details>
-<summary><b>✅ Epic 1.1: Seniority-Based Personalization</b> ✅ COMPLETED (Oct 25, 2024)</summary>
-
-**User Story**: As a user, I want to specify my seniority level so questions match my experience level.
-
-**Tasks**:
-- [x] Add `seniority` enum to `profiles` table (`junior`, `mid`, `senior`)
-- [x] Add `target_seniority` to `searches` table
-- [x] Add seniority selector to Profile page
-- [x] Add seniority field to Home search form
-- [x] Update question generator to adapt difficulty by seniority
-- [x] Create and test database migration
-
-**Implementation Details**:
-- ✅ Database migration: `20251025000000_add_seniority_fields.sql`
-- ✅ Profile page: Experience Level card with dropdown selector
-- ✅ Home page: Target Level field (optional, defaults to auto-detect)
-- ✅ Smart fallback logic: User selection → Profile seniority → CV inference → Default 'mid'
-- ✅ Question generator: Same volume (120-150), different complexity based on level
-
-**Files Changed**:
-- `supabase/migrations/20251025000000_add_seniority_fields.sql` - New migration
-- `src/pages/Profile.tsx` - Experience Level card with selector
-- `src/pages/Home.tsx` - Target Level field in search form
-- `src/services/searchService.ts` - Profile update methods
-- `supabase/functions/interview-research/index.ts` - Pass targetSeniority
-- `supabase/functions/interview-question-generator/index.ts` - Fallback logic implementation
-</details>
-
-<details>
-<summary><b>✅ Epic 1.2: Question Session Sampler</b> ✅ COMPLETED (Oct 25, 2025)</summary>
-
-**User Story**: As a user, I want practice sessions with configurable question counts (not 100+).
-
-**Tasks**:
-- [x] Create `sessionSampler.ts` with smart selection algorithm
-- [x] Implement random sampling respecting current filters
-- [x] Update Practice.tsx to use sampled questions
-- [x] Add configurable sample size input (default: 10)
-- [x] Add "Start New Practice Session" button
-- [x] Add "Show All Questions" toggle
-
-**Implementation Details**:
-- ✅ Simple MVP approach - no over-engineering
-- ✅ Default 10 questions, user can input 1-100
-- ✅ Samples respect user's current stage/category/difficulty filters
-- ✅ Fisher-Yates shuffle for random sampling
-- ✅ "Start New Practice Session" triggers sampling
-- ✅ "Show All Questions" disables sampling
-- ✅ Skipped `last_practiced_at` tracking (not needed for MVP)
-
-**Files Created/Changed**:
-- `src/services/sessionSampler.ts` - New service with random sampling
-- `src/pages/Practice.tsx` - Added session sampler UI and logic
-</details>
-
-<details>
-<summary><b>✅ Epic 1.3: Favorite & Flag Questions</b> ✅ COMPLETED (Oct 25, 2025)</summary>
-
-**User Story**: As a user, I want to favorite important questions and flag difficult ones.
-
-**Tasks**:
-- [x] Create `user_question_flags` table (favorite/needs_work/skipped)
-- [x] Add `setQuestionFlag()`, `removeQuestionFlag()`, and `getQuestionFlags()` to service
-- [x] Add favorite/flag buttons to question cards
-- [x] Add "Show Favorites Only" filter to practice mode
-- [x] Sampler works with favorites (filters applied before sampling)
-
-**Implementation Details**:
-- ✅ Database migration: `20251025120000_add_user_question_flags.sql`
-- ✅ Service methods: `setQuestionFlag()`, `removeQuestionFlag()`, `getQuestionFlags()`
-- ✅ Practice page: Flag buttons (⭐ Favorite, 🚩 Needs Work, ⏭️ Skip)
-- ✅ Setup screen: "Show Favorites Only" checkbox filter
-- ✅ Toggle behavior: Click same flag to remove it
-- ✅ Unique constraint: One flag per user per question (UPSERT pattern)
-
-**Files Created/Changed**:
-- `supabase/migrations/20251025120000_add_user_question_flags.sql` - New migration
-- `src/services/searchService.ts` - Added flag methods
-- `src/pages/Practice.tsx` - Added flag buttons and favorites filter
-</details>
-
----
-
-#### **PHASE 2: Enhanced UX** (2 weeks)
-
-<details>
-<summary><b>✅ Epic 2.1: Swipe Gesture Interface</b> ✅ COMPLETED (Nov 2, 2025)</summary>
-
-**User Story**: As a user, I want to use swipe gestures to navigate and interact with practice questions.
-
-**Tasks**:
-- [x] Install `react-swipeable` or `framer-motion`
-- [x] Implement swipe handlers (left=skip, right=favorite, up=guidance)
-- [x] Add visual swipe indicators
-- [x] Test on iOS/Android mobile devices
-
-**Implementation Details**:
-- ✅ Installed `react-swipeable` library (lightweight, simple)
-- ✅ Swipe left: Skip to next question
-- ✅ Swipe right: Toggle favorite flag
-- ✅ Swipe up: Toggle detailed guidance display (answer approach, evaluation criteria, follow-up questions)
-- ✅ Visual feedback: Color-coded overlay with icons during swipe
-- ✅ Swipe hints: Subtle indicators showing available gestures
-- ✅ Works on both touch (mobile) and mouse drag (desktop)
-- ✅ Smooth animations and transitions
-- ✅ Prevents scroll interference during swipes
-
-**Files Changed**:
-- `package.json` - Added `react-swipeable` dependency
-- `src/pages/Practice.tsx` - Added swipe handlers, visual feedback, and guidance toggle
-</details>
-
-<details>
-<summary><b>Epic 2.2: Audio Transcription (STT)</b> ⏱️ 5 days</summary>
-
-**User Story**: As a user, I want my voice answers transcribed automatically.
-
-**Tasks**:
-- [ ] Choose STT provider (OpenAI Whisper vs Browser Web Speech API)
-- [ ] Create `transcribeAudio` Edge Function (if Whisper)
-- [ ] Update `savePracticeAnswer` to transcribe audio
-- [ ] Display transcript after recording
-- [ ] Ensure P95 latency ≤ 6s (per PRD)
-
-**Provider Comparison**:
-- **OpenAI Whisper**: $0.006/min, high accuracy, requires API
-- **Web Speech API**: Free, browser-native, lower accuracy
-
-**Files to Change**:
-- `supabase/functions/transcribe-audio/` - New function
-- `src/services/searchService.ts` - Add transcription
-- `src/pages/Practice.tsx` - Display transcript
-</details>
-
-<details>
-<summary><b>Epic 2.3: Timer Presets</b> ⏱️ 2 days</summary>
-
-**Tasks**:
-- [ ] Add timer preset buttons (30/60/90s)
-- [ ] Implement countdown timer (vs count-up)
-- [ ] Add visual/audio alert on expiry
-- [ ] Save user's preferred preset to profile
-
-**Files to Change**:
-- `src/pages/Practice.tsx` - Timer controls
-- `src/pages/Profile.tsx` - Save preference
-</details>
-
-<details>
-<summary><b>Epic 2.4: Session Summary & Completion</b> ⏱️ 3 days</summary>
-
-**Tasks**:
-- [ ] Create `SessionSummary` component
-- [ ] Display answered/skipped/favorited breakdown
-- [ ] Add session notes field
-- [ ] Mark session as completed in DB
-
-**Files to Create/Change**:
-- `src/components/SessionSummary.tsx` - New component
-- `src/pages/Practice.tsx` - Show on completion
-- Database: Add `session_notes` to `practice_sessions`
-</details>
-
----
-
-#### **PHASE 3: Performance & Polish** (1 week)
-
-<details>
-<summary><b>Epic 3.1: Progress Analytics Dashboard</b> ⏱️ 4 days</summary>
-
-**Tasks**:
-- [ ] Create Analytics section in Profile/Dashboard
-- [ ] Add `getPracticeAnalytics(userId, days)` method
-- [ ] Display charts (questions/day, completion rate, categories)
-- [ ] Use `recharts` library (already installed)
-
-**Metrics to Track**:
-- Questions answered per day (last 30 days)
-- Session completion rate
-- Category breakdown (behavioral vs technical)
-- Favorite question count
-</details>
-
-<details>
-<summary><b>Epic 3.2: Performance Optimization</b> ⏱️ 3 days</summary>
-
-**Tasks**:
-- [ ] Add performance monitoring (measure P95 latency)
-- [ ] Lazy load Practice page components
-- [ ] Implement question pagination (vs loading 100+)
-- [ ] Optimize `getSearchResults` query
-- [ ] Add service worker for offline support
-
-**Performance Targets** (from PRD):
-- App shell load: < 2s on 5G
-- API response P95: < 500ms
-- Research first set: 60-90s (currently 2-5 mins)
-</details>
-
----
-
-### 📊 Priority Matrix
-
-| Epic | Priority | Effort | User Impact | Business Value |
-|------|----------|--------|-------------|----------------|
-| ~~**1.1 Seniority Personalization**~~ | ✅ Complete | Medium | High | High |
-| ~~**1.2 Question Sampler**~~ | ✅ Complete | Medium | Very High | Very High |
-| ~~**1.3 Favorite/Flag**~~ | ✅ Complete | Low | High | Medium |
-| ~~**2.1 Swipe Gestures**~~ | ✅ Complete | Low | Medium | Low |
-| **2.2 Audio STT** | 🟡 High | High | Very High | High |
-| **2.4 Session Summary** | 🟡 High | Low | Medium | Medium |
-| **2.3 Timer Presets** | 🟢 Medium | Low | Low | Low |
-| **3.1 Analytics Dashboard** | 🟢 Medium | Medium | Medium | Medium |
-| **3.2 Performance** | 🟡 High | Medium | High | High |
-
----
-
-### 🎯 Recommended Sprint Plan
-
-#### **Sprint 1** (Week 1-2): Foundation
-- ✅ Epic 1.1: Seniority Personalization (5 days) - **COMPLETED Oct 25, 2025**
-- ✅ Epic 1.2: Question Sampler (4 days) - **COMPLETED Oct 25, 2025**
-- ✅ Epic 1.3: Favorite/Flag Questions (3 days) - **COMPLETED Oct 25, 2025**
-
-#### **Sprint 2** (Week 3-4): Enhanced UX
-- ✅ Epic 2.1: Swipe Gestures (3 days) - **COMPLETED Nov 2, 2025**
-- ✅ Epic 2.2: Audio STT (5 days)
-- ✅ Epic 2.4: Session Summary (3 days)
-
-#### **Sprint 3** (Week 5): Polish
-- ✅ Epic 2.3: Timer Presets (2 days)
-- ✅ Epic 3.1: Progress Analytics (4 days)
-
-**Total Estimated Time**: 5-6 weeks (1 developer)
-
----
-
-### 📈 Success Metrics (Post-Implementation)
-
-After completing the backlog, track these metrics to validate success:
-
-- **User Engagement**: ≥20% of sign-ups complete 1+ practice sessions
-- **Session Quality**: Average 10-15 questions per session (vs current 100+)
-- **Audio Adoption**: ≥30% of answers use voice recording
-- **Favoriting**: ≥40% of users favorite at least 5 questions
-- **Performance**: Research completion time ≤ 90 seconds (P95)
-- **STT Latency**: Transcription time ≤ 6 seconds (P95)
-
----
-
 ### 🛠️ Contributing to the Backlog
+**Before Starting Work**
+1. Check the priority board above and confirm ownership in Slack.
+2. Read the full PRD in `docs/PRODUCT_DESIGN.md` and relevant deep dives.
+3. Review technical design in `docs/TECHNICAL_DESIGN.md`.
+4. Create a branch (`feature/<initiative>-short-slug`).
 
-**Before Starting Work**:
-1. Check this backlog for assigned epics
-2. Read the full PRD in `docs/PRODUCT_DESIGN.md`
-3. Review technical design in `docs/TECHNICAL_DESIGN.md`
-4. Create a feature branch: `git checkout -b feature/epic-X.Y-description`
+**During Development**
+1. Keep README backlog tables in sync (check off items or adjust owners).
+2. Document deviations inside the relevant doc (`docs/UI_UX_ENHANCEMENT_PLAN.md`, etc.).
+3. Write or update automated tests when changing behavior.
+4. Update any affected docs/diagrams before opening a PR.
 
-**During Development**:
-1. Update task checkboxes as you complete them
-2. Document any deviations from the plan
-3. Write tests for new functionality
-4. Update relevant documentation
-
-**After Completion**:
-1. Mark epic as ✅ complete with date
-2. Update this README with new features
-3. Update `docs/IMPLEMENTATION_CHANGES.md`
-4. Submit PR for review
+**After Completion**
+1. Mark the initiative as shipped with a date in this README.
+2. Append a short summary to `docs/IMPLEMENTATION_CHANGES.md`.
+3. Link QA notes or Supabase logs in the PR description.
+4. Tag product/design for sign-off when UI or copy changed.
 
 ---
 

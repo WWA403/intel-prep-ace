@@ -1,15 +1,16 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.43.2";
 import { SearchLogger } from "../_shared/logger.ts";
-import { RESEARCH_CONFIG } from "../_shared/config.ts";
-import { ProgressTracker, PROGRESS_STEPS, CONCURRENT_TIMEOUTS, executeWithTimeout, executeWithTimeoutSafe, isValidData, validateFetchResponse } from "../_shared/progress-tracker.ts";
+import { RESEARCH_CONFIG, getOpenAIModel, getMaxTokens } from "../_shared/config.ts";
+import { ProgressTracker, PROGRESS_STEPS, CONCURRENT_TIMEOUTS, executeWithTimeout } from "../_shared/progress-tracker.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-interface SynthesisRequest {
+interface InterviewResearchRequest {
   company: string;
   role?: string;
   country?: string;
@@ -20,76 +21,28 @@ interface SynthesisRequest {
   searchId: string;
 }
 
-// Interfaces for final outputs that users see
-interface CompanyInsights {
-  name: string;
-  industry: string;
-  culture: string;
-  values: string[];
-  interview_philosophy: string;
-  recent_hiring_trends: string;
-  interview_stages?: InterviewStageStructured[];
-  interview_experiences: {
-    positive_feedback: string[];
-    negative_feedback: string[];
-    common_themes: string[];
-    difficulty_rating: string;
-    process_duration: string;
-  };
-  interview_questions_bank: {
-    behavioral: string[];
-    technical: string[];
-    situational: string[];
-    company_specific: string[];
-  };
-  hiring_manager_insights: {
-    what_they_look_for: string[];
-    red_flags: string[];
-    success_factors: string[];
-  };
+interface RawResearchData {
+  company_research_raw?: any;
+  job_analysis_raw?: any;
+  cv_analysis_raw?: any;
 }
 
-interface InterviewStageStructured {
-  name: string;
-  order_index: number;
-  duration: string;
-  interviewer: string;
-  content: string;
-  guidance: string;
-  preparation_tips: string[];
-  common_questions: string[];
-  red_flags_to_avoid: string[];
+interface UnifiedSynthesisOutput {
+  interview_stages: any[];
+  comparison_analysis: any;
+  interview_questions_data: any;
+  preparation_guidance: any;
+  synthesis_metadata: any;
 }
 
-interface PersonalizedGuidance {
-  strengths_to_highlight: string[];
-  areas_to_improve: string[];
-  suggested_stories: string[];
-  skill_gaps: string[];
-  competitive_advantages: string[];
-}
+// ============================================================
+// PHASE 1: Data Gathering (concurrent calls to microservices)
+// ============================================================
 
-interface AIResearchOutput {
-  company_insights: CompanyInsights;
-  interview_stages: InterviewStageStructured[];
-  personalized_guidance: PersonalizedGuidance;
-  preparation_timeline: {
-    weeks_before: string[];
-    week_before: string[];
-    day_before: string[];
-    day_of: string[];
-  };
-  cv_job_comparison: any;
-  enhanced_question_bank: any;
-  preparation_priorities: string[];
-}
-
-// Call other microservices for data gathering with timeout handling and validation
 async function gatherCompanyData(company: string, role?: string, country?: string, searchId?: string) {
   try {
-    console.log("Calling company-research function...");
+    console.log("📊 Gathering company research data...");
 
-    // Set a timeout for the company research call (using updated CONCURRENT_TIMEOUTS)
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), CONCURRENT_TIMEOUTS.companyResearch);
 
@@ -99,12 +52,7 @@ async function gatherCompanyData(company: string, role?: string, country?: strin
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
       },
-      body: JSON.stringify({
-        company,
-        role,
-        country,
-        searchId
-      }),
+      body: JSON.stringify({ company, role, country, searchId }),
       signal: controller.signal
     });
 
@@ -112,25 +60,17 @@ async function gatherCompanyData(company: string, role?: string, country?: strin
 
     if (response.ok) {
       const result = await response.json();
-      const companyInsights = result.company_insights;
-
-      // Validate we got actual data, not empty response
-      if (isValidData(companyInsights)) {
-        console.log("✓ Company research returned valid data");
-        return companyInsights;
-      } else {
-        console.warn("Company research returned empty data");
-        return null;
-      }
+      console.log("✅ Company research complete");
+      return result.company_insights || null;
     }
 
-    console.warn(`Company research failed with status ${response.status}, continuing without data`);
+    console.warn(`⚠️ Company research failed with status ${response.status}`);
     return null;
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
-      console.warn(`Company research timed out after ${CONCURRENT_TIMEOUTS.companyResearch}ms, continuing without data`);
+      console.warn(`⏱️ Company research timed out after ${CONCURRENT_TIMEOUTS.companyResearch}ms`);
     } else {
-      console.error("Error calling company-research:", error);
+      console.error("❌ Company research error:", error);
     }
     return null;
   }
@@ -138,14 +78,13 @@ async function gatherCompanyData(company: string, role?: string, country?: strin
 
 async function gatherJobData(roleLinks: string[], searchId: string, company?: string, role?: string) {
   if (!roleLinks || roleLinks.length === 0) {
-    console.log("No role links provided, skipping job analysis");
+    console.log("⏭️ No role links provided, skipping job analysis");
     return null;
   }
 
   try {
-    console.log("Calling job-analysis function...");
+    console.log("📋 Gathering job analysis data...");
 
-    // Set a timeout for the job analysis call (using updated CONCURRENT_TIMEOUTS)
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), CONCURRENT_TIMEOUTS.jobAnalysis);
 
@@ -155,12 +94,7 @@ async function gatherJobData(roleLinks: string[], searchId: string, company?: st
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
       },
-      body: JSON.stringify({
-        roleLinks,
-        searchId,
-        company,
-        role
-      }),
+      body: JSON.stringify({ roleLinks, searchId, company, role }),
       signal: controller.signal
     });
 
@@ -168,25 +102,17 @@ async function gatherJobData(roleLinks: string[], searchId: string, company?: st
 
     if (response.ok) {
       const result = await response.json();
-      const jobRequirements = result.job_requirements;
-
-      // Validate we got actual data, not empty response
-      if (isValidData(jobRequirements)) {
-        console.log("✓ Job analysis returned valid data");
-        return jobRequirements;
-      } else {
-        console.warn("Job analysis returned empty data");
-        return null;
-      }
+      console.log("✅ Job analysis complete");
+      return result.job_requirements || null;
     }
 
-    console.warn(`Job analysis failed with status ${response.status}, continuing without data`);
+    console.warn(`⚠️ Job analysis failed with status ${response.status}`);
     return null;
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
-      console.warn(`Job analysis timed out after ${CONCURRENT_TIMEOUTS.jobAnalysis}ms, continuing without data`);
+      console.warn(`⏱️ Job analysis timed out after ${CONCURRENT_TIMEOUTS.jobAnalysis}ms`);
     } else {
-      console.error("Error calling job-analysis:", error);
+      console.error("❌ Job analysis error:", error);
     }
     return null;
   }
@@ -194,14 +120,13 @@ async function gatherJobData(roleLinks: string[], searchId: string, company?: st
 
 async function gatherCVData(cv: string, userId: string) {
   if (!cv) {
-    console.log("No CV provided, skipping CV analysis");
+    console.log("⏭️ No CV provided, skipping CV analysis");
     return null;
   }
 
   try {
-    console.log("Calling cv-analysis function...");
+    console.log("📄 Gathering CV analysis data...");
 
-    // Set a timeout for the CV analysis call (using updated CONCURRENT_TIMEOUTS)
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), CONCURRENT_TIMEOUTS.cvAnalysis);
 
@@ -211,10 +136,7 @@ async function gatherCVData(cv: string, userId: string) {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
       },
-      body: JSON.stringify({
-        cvText: cv,
-        userId
-      }),
+      body: JSON.stringify({ cvText: cv, userId }),
       signal: controller.signal
     });
 
@@ -222,1035 +144,1384 @@ async function gatherCVData(cv: string, userId: string) {
 
     if (response.ok) {
       const result = await response.json();
-
-      // Validate we got actual data, not empty response
-      if (isValidData(result)) {
-        console.log("✓ CV analysis returned valid data");
-        return result; // Return the full result with both aiAnalysis and parsedData
-      } else {
-        console.warn("CV analysis returned empty data");
-        return null;
-      }
+      console.log("✅ CV analysis complete");
+      return result;
     }
 
-    console.warn(`CV analysis failed with status ${response.status}, continuing without data`);
+    console.warn(`⚠️ CV analysis failed with status ${response.status}`);
     return null;
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
-      console.warn(`CV analysis timed out after ${CONCURRENT_TIMEOUTS.cvAnalysis}ms, continuing without data`);
+      console.warn(`⏱️ CV analysis timed out after ${CONCURRENT_TIMEOUTS.cvAnalysis}ms`);
     } else {
-      console.error("Error calling cv-analysis:", error);
+      console.error("❌ CV analysis error:", error);
     }
     return null;
   }
 }
 
-async function generateCVJobComparison(
-  searchId: string,
-  userId: string,
-  cvAnalysis: any,
-  jobRequirements: any,
-  companyInsights: any
-) {
-  if (!cvAnalysis || !jobRequirements) {
-    console.log("Insufficient data for CV-Job comparison");
-    return null;
-  }
+// ============================================================
+// PHASE 2: UNIFIED SYNTHESIS
+// Consolidates all data sources into single OpenAI call
+// Generates: interview stages + comparison analysis + all questions in one prompt
+// ============================================================
 
-  try {
-    console.log("Calling cv-job-comparison function...");
-    
-    const response = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/cv-job-comparison`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
-      },
-      body: JSON.stringify({
-        searchId,
-        userId,
-        cvAnalysis,
-        jobRequirements,
-        companyInsights
-      }),
-    });
-
-    if (response.ok) {
-      const result = await response.json();
-      return result.comparison_result;
-    }
-    
-    console.warn("CV-Job comparison failed, continuing without data");
-    return null;
-  } catch (error) {
-    console.error("Error calling cv-job-comparison:", error);
-    return null;
-  }
-}
-
-async function generateEnhancedQuestions(
-  searchId: string,
-  userId: string,
-  companyInsights: any,
-  jobRequirements: any,
-  cvAnalysis: any,
-  interviewStages: any[],
-  targetSeniority?: 'junior' | 'mid' | 'senior'
-) {
-  try {
-    console.log("Calling interview-question-generator function...");
-    
-    const questionPromises = interviewStages.map(async (stage) => {
-      const response = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/interview-question-generator`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
-        },
-        body: JSON.stringify({
-          searchId,
-          userId,
-          companyInsights,
-          jobRequirements,
-          cvAnalysis,
-          interviewStage: stage.name,
-          stageDetails: stage,
-          targetSeniority
-        }),
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        return { stage: stage.name, questions: result.question_bank };
-      }
-      return null;
-    });
-
-    const results = await Promise.all(questionPromises);
-    return results.filter(r => r !== null);
-  } catch (error) {
-    console.error("Error calling interview-question-generator:", error);
-    return [];
-  }
-}
-
-// Main AI synthesis function - generates all final user outputs
-async function conductInterviewSynthesis(
-  company: string, 
-  role: string | undefined, 
+async function unifiedSynthesis(
+  company: string,
+  role: string | undefined,
   country: string | undefined,
+  targetSeniority: 'junior' | 'mid' | 'senior' | undefined,
   companyInsights: any,
   jobRequirements: any,
   cvAnalysis: any,
   openaiApiKey: string
-): Promise<AIResearchOutput> {
-  
-  // Build comprehensive context from all gathered data
-  let synthesisContext = `Company: ${company}`;
-  if (role) synthesisContext += `\nRole: ${role}`;
-  if (country) synthesisContext += `\nCountry: ${country}`;
-  
-  if (companyInsights) {
-    synthesisContext += `\n\nCompany Insights:\n`;
-    synthesisContext += `Industry: ${companyInsights.industry}\n`;
-    synthesisContext += `Culture: ${companyInsights.culture}\n`;
-    synthesisContext += `Values: ${companyInsights.values?.join(', ')}\n`;
-    synthesisContext += `Interview Philosophy: ${companyInsights.interview_philosophy}\n`;
-    synthesisContext += `Hiring Trends: ${companyInsights.recent_hiring_trends}\n`;
+): Promise<UnifiedSynthesisOutput | null> {
+
+  try {
+    console.log("🔄 Starting unified synthesis with all data sources...");
+
+    // Build comprehensive synthesis prompt
+    const synthesisPrompt = buildSynthesisPrompt(
+      company, role, country, targetSeniority,
+      companyInsights, jobRequirements, cvAnalysis
+    );
+
+    const model = getOpenAIModel('interviewSynthesis');
+    const maxTokens = getMaxTokens('interviewSynthesis');
     
-    // Include interview stages if available from company research
-    if (companyInsights.interview_stages && companyInsights.interview_stages.length > 0) {
-      synthesisContext += `\nInterview Stages (from candidate reports):\n`;
-      companyInsights.interview_stages.forEach((stage: any, index: number) => {
-        synthesisContext += `Stage ${index + 1}: ${stage.name}\n`;
-        synthesisContext += `Duration: ${stage.duration}\n`;
-        synthesisContext += `Interviewer: ${stage.interviewer}\n`;
-        synthesisContext += `Content: ${stage.content}\n`;
-        if (stage.common_questions && stage.common_questions.length > 0) {
-          synthesisContext += `Common Questions: ${stage.common_questions.join(', ')}\n`;
-        }
-        if (stage.success_tips && stage.success_tips.length > 0) {
-          synthesisContext += `Success Tips: ${stage.success_tips.join(', ')}\n`;
-        }
-        synthesisContext += `\n`;
+    // Log which model is being used
+    console.log(`🤖 Using OpenAI model: ${model} (from ${Deno.env.get("OPENAI_MODEL") ? "OPENAI_MODEL env var" : "default config"})`);
+    console.log(`📊 Max tokens: ${maxTokens}`);
+
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openaiApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model,
+        response_format: { type: "json_object" },
+        messages: [
+          {
+            role: 'system',
+            content: getSynthesisSystemPrompt()
+          },
+          {
+            role: 'user',
+            content: synthesisPrompt
+          }
+        ],
+        max_tokens: maxTokens
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("❌ OpenAI synthesis error:", response.status, errorText);
+      return null;
+    }
+
+    const data = await response.json();
+    const rawContent = data.choices[0].message.content;
+    
+    // Use shared JSON parsing utility that handles markdown code blocks
+    const { parseJsonResponse } = await import("../_shared/openai-client.ts");
+    const synthesisResult = parseJsonResponse(rawContent, {
+      interview_stages: [],
+      comparison_analysis: {},
+      interview_questions_data: {},
+      preparation_guidance: {}
+    });
+    
+    // Log question counts
+    const questionCounts: Record<string, number> = {};
+    if (synthesisResult.interview_questions_data) {
+      Object.entries(synthesisResult.interview_questions_data).forEach(([category, questions]: [string, any]) => {
+        questionCounts[category] = Array.isArray(questions) ? questions.length : 0;
       });
     }
-  }
-  
-  if (jobRequirements) {
-    synthesisContext += `\n\nJob Requirements:\n`;
-    synthesisContext += `Technical Skills: ${jobRequirements.technical_skills?.join(', ')}\n`;
-    synthesisContext += `Soft Skills: ${jobRequirements.soft_skills?.join(', ')}\n`;
-    synthesisContext += `Experience Level: ${jobRequirements.experience_level}\n`;
-    synthesisContext += `Responsibilities: ${jobRequirements.responsibilities?.join(', ')}\n`;
-    synthesisContext += `Qualifications: ${jobRequirements.qualifications?.join(', ')}\n`;
-  }
-  
-  if (cvAnalysis) {
-    // Use aiAnalysis for processing context (raw data structure)
-    const analysisData = cvAnalysis.aiAnalysis || cvAnalysis;
-    synthesisContext += `\n\nCandidate Profile:\n`;
-    synthesisContext += `Current Role: ${analysisData.current_role || 'Not specified'}\n`;
-    synthesisContext += `Experience: ${analysisData.experience_years || 'Not specified'} years\n`;
-    synthesisContext += `Technical Skills: ${analysisData.skills?.technical?.join(', ')}\n`;
-    synthesisContext += `Key Achievements: ${analysisData.key_achievements?.join(', ')}\n`;
-  }
-
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${openaiApiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: RESEARCH_CONFIG.openai.model,
-      response_format: { type: "json_object" },
-      messages: [
-        {
-          role: 'system',
-          content: `You are an expert interview preparation consultant with deep knowledge of hiring practices across major companies. 
-
-Based on the provided research context, create a comprehensive, personalized interview preparation guide. Use the interview stages from company research if available, otherwise create appropriate stages.
-
-CRITICAL REQUIREMENTS:
-1. Use interview stages from company research data if provided
-2. Generate personalized guidance based on candidate's CV and job requirements
-3. Create SPECIFIC, actionable interview questions - NO generic placeholders like "coding problem", "behavioural question", "solve this", etc.
-4. Create specific preparation strategies that align with company culture and values
-5. Provide actionable timeline for interview preparation
-
-FORBIDDEN: Do NOT use generic placeholders in questions. Every question must be specific and actionable.
-EXAMPLES OF BAD QUESTIONS: "Solve this coding problem", "Tell me about a behavioural question", "Explain your approach"
-EXAMPLES OF GOOD QUESTIONS: "How would you design a real-time notification system for 1M users?", "Describe a time when you had to refactor legacy code while maintaining backward compatibility"
-
-You MUST return ONLY valid JSON in this exact structure - no markdown, no additional text:
-
-{
-  "company_insights": {
-    "name": "string",
-    "industry": "string", 
-    "culture": "string",
-    "values": ["array of company values"],
-    "interview_philosophy": "string",
-    "recent_hiring_trends": "string"
-  },
-  "interview_stages": [
-    {
-      "name": "string",
-      "order_index": number,
-      "duration": "string",
-      "interviewer": "string", 
-      "content": "string",
-      "guidance": "string",
-      "preparation_tips": ["array of specific tips"],
-      "common_questions": ["array of 4-6 questions"],
-      "red_flags_to_avoid": ["array of things to avoid"]
-    }
-  ],
-  "personalized_guidance": {
-    "strengths_to_highlight": ["array based on candidate profile"],
-    "areas_to_improve": ["array of improvement areas"],
-    "suggested_stories": ["array of stories to prepare"],
-    "skill_gaps": ["array of gaps to address"],
-    "competitive_advantages": ["array of advantages"]
-  },
-  "preparation_timeline": {
-    "weeks_before": ["array of tasks"],
-    "week_before": ["array of tasks"],
-    "day_before": ["array of tasks"], 
-    "day_of": ["array of tasks"]
-  }
-}`
-        },
-        {
-          role: 'user',
-          content: `Based on this research context, create a comprehensive interview preparation guide:\n\n${synthesisContext}`
-        }
-      ],
-      max_tokens: RESEARCH_CONFIG.openai.maxTokens.interviewSynthesis,
-      temperature: RESEARCH_CONFIG.openai.temperature.synthesis,
-    }),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error("OpenAI API error:", response.status, errorText);
-    throw new Error(`AI synthesis failed: ${response.status} ${response.statusText}`);
-  }
-
-  const data = await response.json();
-  const synthesisResult = data.choices[0].message.content;
-  
-  try {
-    const parsedResult = JSON.parse(synthesisResult);
+    const totalQuestions = Object.values(questionCounts).reduce((sum, count) => sum + count, 0);
     
-    // Validate that we have quality content, not generic fallbacks
-    if (parsedResult.interview_stages?.some((stage: any) => 
-      stage.common_questions?.some((q: string) => 
-        q.includes("coding problem") || q.includes("behavioural question") || q.toLowerCase().includes("solve this")
-      )
-    )) {
-      console.warn("AI returned generic placeholder questions, marking for improvement");
-    }
-    
-    // Use interview stages from company research if available
-    if (companyInsights?.interview_stages && companyInsights.interview_stages.length > 0) {
-      parsedResult.interview_stages = companyInsights.interview_stages.map((stage: any, index: number) => ({
-        name: stage.name,
-        order_index: stage.order_index || index + 1,
-        duration: stage.duration,
-        interviewer: stage.interviewer,
-        content: stage.content,
-        guidance: `Based on candidate reports: ${stage.content}`,
-        preparation_tips: stage.success_tips || [],
-        common_questions: stage.common_questions || [],
-        red_flags_to_avoid: []
-      }));
-    }
-    
-    return parsedResult;
-  } catch (parseError) {
-    console.error("Failed to parse AI synthesis JSON:", parseError);
-    console.error("Raw response:", synthesisResult);
-    console.log("Attempting to create enhanced fallback structure with available data...");
-    
-    // Return fallback structure with basic interview stages
+    console.log("✅ Unified synthesis complete");
+    console.log(`📊 Questions generated: ${totalQuestions} total`);
+    console.log(`📋 Question breakdown:`, questionCounts);
+
     return {
-      company_insights: {
-        name: company,
-        industry: "Unknown",
-        culture: "Research in progress",
-        values: [],
-        interview_philosophy: "Standard interview process",
-        recent_hiring_trends: "Information not available"
-      },
-      interview_stages: [
-        {
-          name: "Initial Phone/Video Screening",
-          order_index: 1,
-          duration: "30-45 minutes",
-          interviewer: "HR Recruiter or Talent Acquisition",
-          content: "Resume review, basic qualifications check, and cultural fit assessment",
-          guidance: "Prepare your elevator pitch, research the company thoroughly, and be ready to discuss your career motivations",
-          preparation_tips: ["Practice 2-minute elevator pitch", "Research company mission and values", "Prepare 3-5 STAR stories", "Review job description thoroughly"],
-          common_questions: ["Tell me about yourself", "Why are you interested in this role?", "Why this company?", "Walk me through your resume", "What are your salary expectations?"],
-          red_flags_to_avoid: ["Lack of company knowledge", "Unclear career goals", "Negative comments about previous employers", "Unrealistic salary expectations"]
-        },
-        {
-          name: "Technical Assessment",
-          order_index: 2,
-          duration: "60-90 minutes",
-          interviewer: "Senior Developer or Technical Lead",
-          content: "Technical skills evaluation, coding challenges, and problem-solving assessment",
-          guidance: "Review core technical concepts, practice coding problems, and prepare to explain your thought process clearly",
-          preparation_tips: ["Practice coding problems on relevant platforms", "Review system design concepts", "Prepare technical questions to ask", "Practice explaining code verbally"],
-          common_questions: [
-            "Walk me through how you would design a scalable web application",
-            "What's your experience with [relevant technology from job description]?",
-            "How do you approach debugging a complex production issue?",
-            "Describe a time when you had to optimize slow-performing code",
-            "What are the trade-offs between different database types for this use case?",
-            "How do you ensure code quality in a team environment?"
-          ],
-          red_flags_to_avoid: ["Unable to explain reasoning", "Poor coding practices", "Giving up too quickly on problems", "Not asking clarifying questions"]
-        },
-        {
-          name: "Team/Behavioral Interview",
-          order_index: 3,
-          duration: "45-60 minutes",
-          interviewer: "Hiring Manager and/or Team Members",
-          content: "Behavioral questions, team fit assessment, and leadership scenarios",
-          guidance: "Focus on demonstrating collaboration skills, leadership experience, and alignment with team culture",
-          preparation_tips: ["Prepare detailed STAR stories for each core competency", "Research team structure and dynamics", "Think of examples showing leadership and collaboration", "Prepare thoughtful questions about team processes"],
-          common_questions: [
-            "Tell me about a time you had to collaborate with a difficult team member",
-            "Describe a situation where you had to adapt to significant changes",
-            "How do you prioritize tasks when everything seems urgent?",
-            "Give me an example of when you took initiative on a project",
-            "Tell me about a time when you had to learn a new technology quickly",
-            "Describe a situation where you had to give constructive feedback to a colleague"
-          ],
-          red_flags_to_avoid: ["Inability to give specific examples", "Blaming others for failures", "Showing poor communication skills", "Lack of self-awareness"]
-        },
-        {
-          name: "Final Round/Executive Interview",
-          order_index: 4,
-          duration: "30-45 minutes",
-          interviewer: "Senior Manager or Director",
-          content: "Strategic thinking, long-term vision, and final cultural fit assessment",
-          guidance: "Demonstrate strategic thinking, show understanding of business context, and articulate your long-term career vision",
-          preparation_tips: ["Research company strategy and industry trends", "Prepare vision for role and career growth", "Think about strategic challenges the company faces", "Prepare executive-level questions"],
-          common_questions: [
-            "How do you see this role evolving in the next 2-3 years?",
-            "What would you accomplish in your first 90 days in this position?",
-            "How do you balance innovation with maintaining existing systems?",
-            "What questions do you have about our company's strategic direction?",
-            "How do you stay updated with industry trends and best practices?",
-            "What do you think are the biggest challenges facing our industry right now?"
-          ],
-          red_flags_to_avoid: ["Lack of strategic thinking", "No questions for interviewer", "Unclear long-term goals", "Insufficient business awareness"]
-        }
-      ],
-      personalized_guidance: {
-        strengths_to_highlight: [],
-        areas_to_improve: [],
-        suggested_stories: [],
-        skill_gaps: [],
-        competitive_advantages: []
-      },
-      preparation_timeline: {
-        weeks_before: ["Research company and role"],
-        week_before: ["Practice common questions"],
-        day_before: ["Review notes"],
-        day_of: ["Arrive early"]
+      interview_stages: synthesisResult.interview_stages || [],
+      comparison_analysis: synthesisResult.comparison_analysis || {},
+      interview_questions_data: synthesisResult.interview_questions_data || {},
+      preparation_guidance: synthesisResult.preparation_guidance || {},
+      synthesis_metadata: {
+        model,
+        max_tokens: maxTokens,
+        timestamp: new Date().toISOString()
       }
     };
-  }
-}
-
-// Helper functions for dynamic question analysis and categorization
-function categorizeQuestion(question: string, stageName: string): string {
-  const questionLower = question.toLowerCase();
-  
-  // Behavioral indicators
-  if (questionLower.includes('tell me about') || questionLower.includes('describe a time') || 
-      questionLower.includes('give me an example') || questionLower.includes('walk me through')) {
-    return 'behavioral';
-  }
-  
-  // Technical indicators
-  if (questionLower.includes('algorithm') || questionLower.includes('code') || questionLower.includes('system design') ||
-      questionLower.includes('technical') || questionLower.includes('programming') || questionLower.includes('database')) {
-    return 'technical';
-  }
-  
-  // Company-specific indicators
-  if (questionLower.includes('company') || questionLower.includes('culture') || questionLower.includes('values') ||
-      questionLower.includes('why us') || questionLower.includes('why here')) {
-    return 'company_specific';
-  }
-  
-  // Situational indicators
-  if (questionLower.includes('what would you do') || questionLower.includes('how would you handle') ||
-      questionLower.includes('if you were') || questionLower.includes('scenario')) {
-    return 'situational';
-  }
-  
-  // Role-specific based on stage
-  if (stageName.toLowerCase().includes('technical') || stageName.toLowerCase().includes('coding')) {
-    return 'technical';
-  }
-  
-  return 'general';
-}
-
-function determineDifficulty(question: any, jobRequirements: any, cvAnalysis: any): string {
-  // If question already has difficulty, use it
-  if (question.difficulty && question.difficulty !== 'Medium') {
-    return question.difficulty;
-  }
-  
-  // Determine from job requirements
-  if (jobRequirements?.experience_level) {
-    const expLevel = jobRequirements.experience_level.toLowerCase();
-    if (expLevel.includes('senior') || expLevel.includes('lead') || expLevel.includes('principal')) {
-      return 'Hard';
-    }
-    if (expLevel.includes('junior') || expLevel.includes('entry')) {
-      return 'Easy';
-    }
-  }
-  
-  // Determine from CV analysis
-  if (cvAnalysis?.aiAnalysis?.experience_years || cvAnalysis?.experience_years) {
-    const years = cvAnalysis.aiAnalysis?.experience_years || cvAnalysis.experience_years;
-    if (years >= 8) return 'Hard';
-    if (years <= 2) return 'Easy';
-  }
-  
-  return 'Medium';
-}
-
-function determineDifficultyFromContext(question: string, jobRequirements: any, cvAnalysis: any, stageName: string): string {
-  const questionLower = question.toLowerCase();
-  
-  // Technical questions are generally harder
-  if (questionLower.includes('system design') || questionLower.includes('architecture')) {
-    return 'Hard';
-  }
-  
-  // Basic behavioral questions
-  if (questionLower.includes('tell me about yourself')) {
-    return 'Easy';
-  }
-  
-  // Use job requirements and CV analysis
-  return determineDifficulty({ difficulty: null }, jobRequirements, cvAnalysis);
-}
-
-function generateAnswerApproach(question: string, category: string): string {
-  const questionLower = question.toLowerCase();
-  
-  if (category === 'behavioral') {
-    return 'Use the STAR method (Situation, Task, Action, Result) to structure your response with specific examples from your experience';
-  }
-  
-  if (category === 'technical') {
-    if (questionLower.includes('system design')) {
-      return 'Start with requirements gathering, then discuss high-level architecture, dive into components, and address scalability concerns';
-    }
-    return 'Explain your thought process clearly, discuss trade-offs, and provide concrete examples or pseudocode when relevant';
-  }
-  
-  if (category === 'company_specific') {
-    return 'Demonstrate knowledge of the company\'s values, recent developments, and how your goals align with their mission';
-  }
-  
-  if (category === 'situational') {
-    return 'Outline your problem-solving approach, consider multiple perspectives, and explain your reasoning for the chosen solution';
-  }
-  
-  return 'Provide a clear, structured response with specific examples that demonstrate your relevant skills and experience';
-}
-
-function generateEvaluationCriteria(category: string, companyInsights: any, jobRequirements: any): string[] {
-  const baseCriteria = ['Clarity of communication', 'Relevance to role'];
-  
-  if (category === 'behavioral') {
-    return [...baseCriteria, 'Specific examples provided', 'Leadership and problem-solving skills', 'Self-awareness and growth mindset'];
-  }
-  
-  if (category === 'technical') {
-    return [...baseCriteria, 'Technical accuracy', 'Problem-solving approach', 'Code quality and best practices', 'System thinking'];
-  }
-  
-  if (category === 'company_specific') {
-    const culturalFit = companyInsights?.values?.length > 0 ? 'Alignment with company values' : 'Cultural fit assessment';
-    return [...baseCriteria, 'Company knowledge', culturalFit, 'Genuine interest in role'];
-  }
-  
-  if (category === 'situational') {
-    return [...baseCriteria, 'Critical thinking', 'Decision-making process', 'Consideration of stakeholders'];
-  }
-  
-  return [...baseCriteria, 'Confidence', 'Professional experience'];
-}
-
-function isStarStoryFit(question: string): boolean {
-  const questionLower = question.toLowerCase();
-  const starIndicators = [
-    'tell me about', 'describe a time', 'give me an example', 'walk me through',
-    'when have you', 'how did you handle', 'share an experience'
-  ];
-  
-  return starIndicators.some(indicator => questionLower.includes(indicator));
-}
-
-function generateCompanyContext(question: string, company: string, role: string, companyInsights: any): string {
-  const category = categorizeQuestion(question, '');
-  
-  if (category === 'company_specific' && companyInsights?.culture) {
-    return `This question assesses fit with ${company}'s culture: ${companyInsights.culture}`;
-  }
-  
-  if (category === 'technical' && role) {
-    return `Technical question relevant to ${role} position at ${company}`;
-  }
-  
-  if (category === 'behavioral') {
-    const values = companyInsights?.values?.length > 0 ? 
-      ` Values they look for: ${companyInsights.values.slice(0, 3).join(', ')}` : '';
-    return `Behavioral question for ${company} interview.${values}`;
-  }
-  
-  return `Standard interview question for ${role || 'this position'} at ${company}`;
-}
-
-function calculateConfidenceScore(question: any, companyInsights: any, category: string): number {
-  let score = 0.6; // Base score
-  
-  // Higher confidence for questions with research backing
-  if (question.rationale && question.rationale.length > 50) {
-    score += 0.2;
-  }
-  
-  // Company-specific questions with insights get higher score
-  if (category === 'company_specific' && companyInsights?.interview_questions_bank) {
-    score += 0.15;
-  }
-  
-  // Technical questions from comprehensive analysis
-  if (category === 'technical' && question.suggested_answer_approach) {
-    score += 0.1;
-  }
-  
-  return Math.min(0.95, score);
-}
-
-function calculateStageQuestionConfidence(question: string, companyInsights: any, stageName: string): number {
-  let score = 0.6; // Base score for stage questions
-  
-  // Higher confidence if we have company insights
-  if (companyInsights?.interview_stages?.length > 0) {
-    score += 0.15;
-  }
-  
-  // Standard questions get reasonable confidence
-  const questionLower = question.toLowerCase();
-  if (questionLower.includes('tell me about yourself') || questionLower.includes('why this company')) {
-    score += 0.1;
-  }
-  
-  return Math.min(0.85, score);
-}
-
-serve(async (req) => {
-  // Handle CORS preflight request
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const { company, role, country, roleLinks, cv, targetSeniority, userId, searchId } = await req.json() as SynthesisRequest;
-
-    // Validate required fields
-    if (!company || !userId || !searchId) {
-      return new Response(
-        JSON.stringify({ error: 'Missing required fields: company, userId, searchId' }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
-    }
-
-    // Start background processing immediately (true fire-and-forget)
-    // Do NOT await anything before returning response
-    processResearchAsync(company, role, country, roleLinks, cv, targetSeniority, userId, searchId)
-      .catch((error) => {
-        console.error('Background processing failed:', error);
-        // Error handling happens inside processResearchAsync
-      });
-
-    // Return immediate response (202 Accepted) - no database operations before this!
-    return new Response(
-      JSON.stringify({
-        searchId,
-        status: 'accepted',
-        message: 'Research request accepted and processing started',
-        estimatedTime: '20-30 seconds'
-      }),
-      {
-        status: 202,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
-    );
   } catch (error) {
-    console.error('Error parsing request:', error);
-    return new Response(
-      JSON.stringify({ error: 'Invalid request format' }),
-      {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
-    );
+    console.error("❌ Synthesis error:", error);
+    return null;
   }
-});
+}
 
-/**
- * Background processing function for async job execution
- * Implements concurrent processing pattern for optimal performance
- */
-async function processResearchAsync(
+function getSynthesisSystemPrompt(): string {
+  return `You are an expert interview preparation consultant with deep knowledge of hiring practices across major companies and technical roles.
+
+Your task is to create a COMPREHENSIVE, DEEPLY TAILORED interview preparation guide based on company research, job requirements, and candidate profile.
+
+CRITICAL REQUIREMENTS:
+1. Generate 4 realistic interview stages based on ACTUAL company hiring process from candidate reports
+2. Create a detailed CV-to-Job comparison analysis with specific skill gaps and experience mapping
+3. Generate MINIMUM 30 questions (target 30-50) HIGHLY TAILORED interview questions across 7 categories - THIS IS MANDATORY
+4. Provide personalized preparation guidance based on candidate's specific background
+
+QUESTION COUNT REQUIREMENT - MANDATORY:
+- MINIMUM 30 questions total across all categories (this is a hard requirement, not a suggestion)
+- TARGET 30-50 questions total (aim for 5-8 questions per category)
+- DISTRIBUTION: Ensure at least 3-4 questions per category minimum
+- If you cannot generate 30+ questions, you MUST generate more variations and extensions of the real questions provided
+
+QUALITY REQUIREMENTS - STRICTLY ENFORCE:
+- QUALITY OVER QUANTITY: Generate 30-50 questions total, ensuring EVERY question is deeply tailored and highly relevant
+- QUESTION-FIRST APPROACH: Use the REAL interview questions provided as the foundation. Generate variations, extensions, and context-specific versions of these actual questions.
+- DEEP TAILORING: 100% of questions must reference specific details from:
+  * Candidate's work history, projects, and achievements
+  * Specific job responsibilities and requirements
+  * Company culture, values, and interview philosophy
+  * Real interview questions extracted from candidate reports
+- SPECIFICITY: All questions must be SPECIFIC and ACTIONABLE (NO generic placeholders)
+  * Instead of "Tell me about a challenge" → "Tell me about a time you optimized a system at scale, similar to what we do at [Company Name]"
+  * Instead of "Solve a coding problem" → "Design a distributed caching system for our product recommendation engine"
+- INTERVIEW STAGES: Must match ACTUAL company processes from candidate reports (not generic assumptions)
+- DIFFICULTY ADAPTATION: Questions must match candidate's seniority level in complexity, not just quantity
+- RESEARCH GROUNDING: All data must be grounded in provided research - cite specific sources when possible
+
+FORBIDDEN:
+- Generic placeholders like "coding problem", "behavioral question", "solve this"
+- Vague questions without context or company/job/CV references
+- Questions not aligned with company culture, job requirements, or candidate background
+- Repeating the same question structure without variation
+- Ignoring the real interview questions provided as foundation
+
+QUESTION GENERATION STRATEGY:
+1. Start with REAL questions from candidate reports - use these as templates
+2. Generate MINIMUM 5 questions per category (target 5-8 per category for 30-50 total) - THIS IS MANDATORY
+3. If you have fewer real questions, generate MORE variations and extensions to reach the 30+ minimum
+4. Each question MUST reference specific details from candidate's background, job requirements, or company research
+5. Create variations tailored to the specific role and candidate background
+6. Create extensions that probe deeper into candidate's experiences
+7. Align questions with job responsibilities and company values
+8. Ensure questions reference specific technologies, projects, or achievements from CV
+9. Match question complexity to candidate's experience level
+10. NO GENERIC QUESTIONS: Every question must be unique and reference specific context details
+11. COUNT YOUR QUESTIONS: Before finalizing, count total questions - you MUST have at least 30 total
+
+You MUST return ONLY valid JSON in the exact structure specified - no markdown, no additional text.`;
+}
+
+function buildSynthesisPrompt(
   company: string,
   role: string | undefined,
   country: string | undefined,
-  roleLinks: string[] | undefined,
-  cv: string | undefined,
   targetSeniority: 'junior' | 'mid' | 'senior' | undefined,
-  userId: string,
-  searchId: string
-) {
-  // Initialize progress tracker inside async function (not in main handler)
-  const tracker = new ProgressTracker(searchId);
+  companyInsights: any,
+  jobRequirements: any,
+  cvAnalysis: any
+): string {
+  let prompt = `Create a comprehensive, deeply tailored interview preparation guide for:\n`;
+  prompt += `Company: ${company}\n`;
+  if (role) prompt += `Role: ${role}\n`;
+  if (country) prompt += `Country: ${country}\n`;
+  if (targetSeniority) prompt += `Candidate Seniority: ${targetSeniority}\n`;
+  prompt += `\n`;
 
+  // ============================================================
+  // SECTION 1: REAL INTERVIEW QUESTIONS (PRIORITY #1)
+  // ============================================================
+  if (companyInsights?.interview_questions_bank) {
+    prompt += `=== REAL INTERVIEW QUESTIONS FROM CANDIDATE REPORTS ===\n`;
+    prompt += `These are ACTUAL questions asked in interviews at ${company}. Use these as the foundation for generating tailored questions.\n\n`;
+    
+    const qBank = companyInsights.interview_questions_bank;
+    if (qBank.behavioral?.length > 0) {
+      prompt += `BEHAVIORAL QUESTIONS (${qBank.behavioral.length} found):\n`;
+      qBank.behavioral.forEach((q: string, idx: number) => {
+        prompt += `${idx + 1}. "${q}"\n`;
+      });
+      prompt += `\n`;
+    }
+    
+    if (qBank.technical?.length > 0) {
+      prompt += `TECHNICAL QUESTIONS (${qBank.technical.length} found):\n`;
+      qBank.technical.forEach((q: string, idx: number) => {
+        prompt += `${idx + 1}. "${q}"\n`;
+      });
+      prompt += `\n`;
+    }
+    
+    if (qBank.situational?.length > 0) {
+      prompt += `SITUATIONAL QUESTIONS (${qBank.situational.length} found):\n`;
+      qBank.situational.forEach((q: string, idx: number) => {
+        prompt += `${idx + 1}. "${q}"\n`;
+      });
+      prompt += `\n`;
+    }
+    
+    if (qBank.company_specific?.length > 0) {
+      prompt += `COMPANY-SPECIFIC QUESTIONS (${qBank.company_specific.length} found):\n`;
+      qBank.company_specific.forEach((q: string, idx: number) => {
+        prompt += `${idx + 1}. "${q}"\n`;
+      });
+      prompt += `\n`;
+    }
+    
+    prompt += `CRITICAL: Generate variations and extensions of these real questions, tailored to the candidate's background and the specific role.\n\n`;
+  }
+
+  // ============================================================
+  // SECTION 2: DETAILED COMPANY RESEARCH
+  // ============================================================
+  if (companyInsights) {
+    prompt += `=== COMPANY RESEARCH & INTERVIEW INSIGHTS ===\n`;
+    prompt += `Industry: ${companyInsights.industry || 'Not specified'}\n`;
+    prompt += `Culture: ${companyInsights.culture || 'Not specified'}\n`;
+    prompt += `Values: ${companyInsights.values?.join(', ') || 'Not specified'}\n`;
+    prompt += `Interview Philosophy: ${companyInsights.interview_philosophy || 'Not specified'}\n`;
+    prompt += `Recent Hiring Trends: ${companyInsights.recent_hiring_trends || 'Not specified'}\n\n`;
+    
+    // Detailed interview stages
+    if (companyInsights.interview_stages?.length > 0) {
+      prompt += `INTERVIEW PROCESS (from actual candidate reports):\n`;
+      companyInsights.interview_stages.forEach((stage: any) => {
+        prompt += `\nStage ${stage.order_index}: ${stage.name}\n`;
+        prompt += `  Duration: ${stage.duration || 'Not specified'}\n`;
+        prompt += `  Interviewer: ${stage.interviewer || 'Not specified'}\n`;
+        prompt += `  What to Expect: ${stage.content || 'Not specified'}\n`;
+        if (stage.common_questions?.length > 0) {
+          prompt += `  Common Questions in This Stage:\n`;
+          stage.common_questions.forEach((q: string) => {
+            prompt += `    - "${q}"\n`;
+          });
+        }
+        if (stage.success_tips?.length > 0) {
+          prompt += `  Success Tips:\n`;
+          stage.success_tips.forEach((tip: string) => {
+            prompt += `    - ${tip}\n`;
+          });
+        }
+        if (stage.difficulty_level) {
+          prompt += `  Difficulty: ${stage.difficulty_level}\n`;
+        }
+      });
+      prompt += `\n`;
+    }
+    
+    // Interview experiences
+    if (companyInsights.interview_experiences) {
+      const exp = companyInsights.interview_experiences;
+      prompt += `INTERVIEW EXPERIENCES FROM CANDIDATES:\n`;
+      if (exp.difficulty_rating) {
+        prompt += `Difficulty Rating: ${exp.difficulty_rating}\n`;
+      }
+      if (exp.process_duration) {
+        prompt += `Typical Process Duration: ${exp.process_duration}\n`;
+      }
+      if (exp.positive_feedback?.length > 0) {
+        prompt += `Positive Feedback Themes:\n`;
+        exp.positive_feedback.forEach((fb: string) => {
+          prompt += `  - ${fb}\n`;
+        });
+      }
+      if (exp.negative_feedback?.length > 0) {
+        prompt += `Common Challenges:\n`;
+        exp.negative_feedback.forEach((fb: string) => {
+          prompt += `  - ${fb}\n`;
+        });
+      }
+      if (exp.common_themes?.length > 0) {
+        prompt += `Recurring Themes:\n`;
+        exp.common_themes.forEach((theme: string) => {
+          prompt += `  - ${theme}\n`;
+        });
+      }
+      prompt += `\n`;
+    }
+    
+    // Hiring manager insights
+    if (companyInsights.hiring_manager_insights) {
+      const hm = companyInsights.hiring_manager_insights;
+      prompt += `HIRING MANAGER INSIGHTS:\n`;
+      if (hm.what_they_look_for?.length > 0) {
+        prompt += `What They Look For:\n`;
+        hm.what_they_look_for.forEach((item: string) => {
+          prompt += `  - ${item}\n`;
+        });
+      }
+      if (hm.success_factors?.length > 0) {
+        prompt += `Success Factors:\n`;
+        hm.success_factors.forEach((factor: string) => {
+          prompt += `  - ${factor}\n`;
+        });
+      }
+      if (hm.red_flags?.length > 0) {
+        prompt += `Red Flags (Avoid These):\n`;
+        hm.red_flags.forEach((flag: string) => {
+          prompt += `  - ${flag}\n`;
+        });
+      }
+      prompt += `\n`;
+    }
+  }
+
+  // ============================================================
+  // SECTION 3: DETAILED JOB REQUIREMENTS
+  // ============================================================
+  if (jobRequirements) {
+    prompt += `=== JOB REQUIREMENTS & RESPONSIBILITIES ===\n`;
+    if (jobRequirements.experience_level) {
+      prompt += `Required Experience Level: ${jobRequirements.experience_level}\n`;
+    }
+    
+    if (jobRequirements.technical_skills?.length > 0) {
+      prompt += `\nTechnical Skills Required:\n`;
+      jobRequirements.technical_skills.forEach((skill: string) => {
+        prompt += `  - ${skill}\n`;
+      });
+    }
+    
+    if (jobRequirements.soft_skills?.length > 0) {
+      prompt += `\nSoft Skills Required:\n`;
+      jobRequirements.soft_skills.forEach((skill: string) => {
+        prompt += `  - ${skill}\n`;
+      });
+    }
+    
+    if (jobRequirements.responsibilities?.length > 0) {
+      prompt += `\nKey Responsibilities:\n`;
+      jobRequirements.responsibilities.forEach((resp: string) => {
+        prompt += `  - ${resp}\n`;
+      });
+    }
+    
+    if (jobRequirements.qualifications?.length > 0) {
+      prompt += `\nRequired Qualifications:\n`;
+      jobRequirements.qualifications.forEach((qual: string) => {
+        prompt += `  - ${qual}\n`;
+      });
+    }
+    
+    if (jobRequirements.nice_to_have?.length > 0) {
+      prompt += `\nNice to Have:\n`;
+      jobRequirements.nice_to_have.forEach((item: string) => {
+        prompt += `  - ${item}\n`;
+      });
+    }
+    
+    if (jobRequirements.interview_process_hints?.length > 0) {
+      prompt += `\nInterview Process Hints from Job Posting:\n`;
+      jobRequirements.interview_process_hints.forEach((hint: string) => {
+        prompt += `  - ${hint}\n`;
+      });
+    }
+    
+    prompt += `\n`;
+  }
+
+  // ============================================================
+  // SECTION 4: DETAILED CANDIDATE PROFILE
+  // ============================================================
+  if (cvAnalysis) {
+    const analysisData = cvAnalysis.aiAnalysis || cvAnalysis;
+    prompt += `=== CANDIDATE PROFILE (TAILOR QUESTIONS TO THIS BACKGROUND) ===\n`;
+    prompt += `Current Role: ${analysisData.current_role || 'Not specified'}\n`;
+    prompt += `Total Experience: ${analysisData.experience_years || 0} years\n`;
+    prompt += `Target Seniority Level: ${targetSeniority || 'mid'}\n\n`;
+    
+    // Full work history
+    if (analysisData.experience?.length > 0) {
+      prompt += `WORK HISTORY:\n`;
+      analysisData.experience.forEach((exp: any, idx: number) => {
+        prompt += `${idx + 1}. ${exp.role} at ${exp.company} (${exp.duration || 'Duration not specified'})\n`;
+        if (exp.achievements?.length > 0) {
+          prompt += `   Key Achievements:\n`;
+          exp.achievements.forEach((ach: string) => {
+            prompt += `     - ${ach}\n`;
+          });
+        }
+      });
+      prompt += `\n`;
+    }
+    
+    // Technical skills breakdown
+    if (analysisData.skills) {
+      if (analysisData.skills.technical?.length > 0) {
+        prompt += `TECHNICAL SKILLS:\n`;
+        analysisData.skills.technical.forEach((skill: string) => {
+          prompt += `  - ${skill}\n`;
+        });
+        prompt += `\n`;
+      }
+      
+      if (analysisData.skills.soft?.length > 0) {
+        prompt += `SOFT SKILLS:\n`;
+        analysisData.skills.soft.forEach((skill: string) => {
+          prompt += `  - ${skill}\n`;
+        });
+        prompt += `\n`;
+      }
+      
+      if (analysisData.skills.certifications?.length > 0) {
+        prompt += `CERTIFICATIONS:\n`;
+        analysisData.skills.certifications.forEach((cert: string) => {
+          prompt += `  - ${cert}\n`;
+        });
+        prompt += `\n`;
+      }
+    }
+    
+    // Projects
+    if (analysisData.projects?.length > 0) {
+      prompt += `NOTABLE PROJECTS:\n`;
+      analysisData.projects.forEach((project: string, idx: number) => {
+        prompt += `${idx + 1}. ${project}\n`;
+      });
+      prompt += `\n`;
+    }
+    
+    // Key achievements
+    if (analysisData.key_achievements?.length > 0) {
+      prompt += `KEY ACHIEVEMENTS:\n`;
+      analysisData.key_achievements.forEach((ach: string, idx: number) => {
+        prompt += `${idx + 1}. ${ach}\n`;
+      });
+      prompt += `\n`;
+    }
+    
+    // Education
+    if (analysisData.education) {
+      prompt += `EDUCATION:\n`;
+      prompt += `  Degree: ${analysisData.education.degree || 'Not specified'}\n`;
+      prompt += `  Institution: ${analysisData.education.institution || 'Not specified'}\n`;
+      if (analysisData.education.graduation_year) {
+        prompt += `  Graduation Year: ${analysisData.education.graduation_year}\n`;
+      }
+      prompt += `\n`;
+    }
+    
+    prompt += `CRITICAL: Generate questions that reference specific experiences, projects, and achievements from this candidate's background.\n\n`;
+  }
+
+  // ============================================================
+  // SECTION 5: SYNTHESIS INSTRUCTIONS
+  // ============================================================
+  prompt += `=== SYNTHESIS REQUIREMENTS ===\n`;
+  prompt += `CRITICAL: You MUST generate MINIMUM 30 questions total (target 30-50) - THIS IS MANDATORY\n`;
+  prompt += `1. Use the REAL interview questions above as the foundation - generate tailored variations and extensions\n`;
+  prompt += `2. Tailor EVERY question to the candidate's specific background (work history, projects, achievements)\n`;
+  prompt += `3. Align EVERY question with the specific job responsibilities and requirements\n`;
+  prompt += `4. Reference company culture, values, and interview philosophy in EVERY question\n`;
+  prompt += `5. Generate MINIMUM 5 questions per category (target 5-8 per category for 30-50 total) - MANDATORY MINIMUM\n`;
+  prompt += `6. If you have fewer real questions, generate MORE variations to reach the 30+ minimum requirement\n`;
+  prompt += `7. COUNT YOUR QUESTIONS: Before finalizing JSON, ensure you have at least 30 total questions across all categories\n`;
+  prompt += `8. Ensure 100% of questions reference specific company/job/CV details (NO generic questions)\n`;
+  prompt += `9. Match question complexity to ${targetSeniority || 'mid'}-level candidate\n`;
+  prompt += `10. Include rationale explaining why each question would be asked at ${company} (reference specific details)\n`;
+  prompt += `11. Provide company-specific context for each question (must include specific company information)\n`;
+  prompt += `12. Map candidate's experiences to potential STAR stories for behavioral questions\n`;
+  prompt += `13. NO GENERIC QUESTIONS: Every question must be unique and reference specific details from the context\n\n`;
+
+  prompt += `Return this exact JSON structure:\n`;
+  prompt += JSON.stringify(getUnifiedSynthesisSchema(), null, 2);
+
+  return prompt;
+}
+
+// ============================================================
+// ITERATIVE QUESTION GENERATION
+// Generates additional questions when initial synthesis is insufficient
+// ============================================================
+
+function countQuestions(questionsData: any): { total: number; byCategory: Record<string, number> } {
+  const byCategory: Record<string, number> = {};
+  let total = 0;
+
+  if (questionsData) {
+    Object.entries(questionsData).forEach(([category, questions]: [string, any]) => {
+      const count = Array.isArray(questions) ? questions.length : 0;
+      byCategory[category] = count;
+      total += count;
+    });
+  }
+
+  return { total, byCategory };
+}
+
+async function generateAdditionalQuestionsForCategory(
+  category: string,
+  targetCount: number,
+  existingQuestions: any[],
+  company: string,
+  role: string | undefined,
+  targetSeniority: 'junior' | 'mid' | 'senior' | undefined,
+  companyInsights: any,
+  jobRequirements: any,
+  cvAnalysis: any,
+  openaiApiKey: string
+): Promise<any[]> {
   try {
-    // Initialize tracker and logger
-    await tracker.updateStep('INITIALIZING');
+    console.log(`🔄 Generating ${targetCount} additional ${category} questions...`);
 
-    const logger = new SearchLogger(searchId, 'interview-research', userId);
-    logger.log('REQUEST_INPUT', 'VALIDATION', { company, role, country, roleLinks: roleLinks?.length, hasCv: !!cv, userId });
+    const model = getOpenAIModel('questionGeneration');
+    const maxTokens = getMaxTokens('questionGeneration');
 
-    // Create Supabase client
-    const supabaseUrl = Deno.env.get("SUPABASE_URL");
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    
-    if (!supabaseUrl || !supabaseServiceKey) {
-      throw new Error("Missing Supabase configuration");
-    }
-    
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    // Build focused prompt for this category
+    let prompt = `Generate ${targetCount} HIGHLY TAILORED ${category} interview questions for:\n`;
+    prompt += `Company: ${company}\n`;
+    if (role) prompt += `Role: ${role}\n`;
+    if (targetSeniority) prompt += `Candidate Seniority: ${targetSeniority}\n\n`;
 
-    // Get OpenAI API key
-    const openaiApiKey = Deno.env.get("OPENAI_API_KEY");
-    if (!openaiApiKey) {
-      throw new Error("Missing OpenAI API key");
+    // Include existing questions to avoid duplicates
+    if (existingQuestions.length > 0) {
+      prompt += `EXISTING QUESTIONS (do NOT repeat these):\n`;
+      existingQuestions.forEach((q, idx) => {
+        prompt += `${idx + 1}. ${q.question || q}\n`;
+      });
+      prompt += `\n`;
     }
 
-    console.log("Starting concurrent research for", company, role || "");
-    logger.log('STEP_START', 'CONCURRENT_PROCESSING', { step: 1, description: 'Starting concurrent data gathering' });
-    
-    // Step 1: Execute all research operations concurrently with soft-fail and partial progress handling
-    await tracker.updateStep('COMPANY_RESEARCH_START');
-    await tracker.updateStep('JOB_ANALYSIS_START');
-    await tracker.updateStep('CV_ANALYSIS_START');
-
-    const [companyRes, jobRes, cvRes] = await Promise.allSettled([
-      executeWithTimeoutSafe(() => gatherCompanyData(company, role, country, searchId), CONCURRENT_TIMEOUTS.companyResearch),
-      executeWithTimeoutSafe(() => gatherJobData(roleLinks || [], searchId, company, role), CONCURRENT_TIMEOUTS.jobAnalysis),
-      executeWithTimeoutSafe(() => gatherCVData(cv || "", userId), CONCURRENT_TIMEOUTS.cvAnalysis),
-    ]);
-
-    let companyInsights: any = null;
-    if (companyRes.status === 'fulfilled' && companyRes.value.ok) {
-      companyInsights = companyRes.value.value;
-      await tracker.updateStep('COMPANY_RESEARCH_COMPLETE');
-    } else {
-      await tracker.updateStep('COMPANY_RESEARCH_PARTIAL', 'Company research timed out, continuing with available data');
+    // Include relevant context
+    if (companyInsights?.interview_questions_bank?.[category]?.length > 0) {
+      prompt += `REAL ${category.toUpperCase()} QUESTIONS FROM CANDIDATE REPORTS:\n`;
+      companyInsights.interview_questions_bank[category].forEach((q: string, idx: number) => {
+        prompt += `${idx + 1}. "${q}"\n`;
+      });
+      prompt += `\n`;
     }
 
-    let jobRequirements: any = null;
-    if (jobRes.status === 'fulfilled' && jobRes.value.ok) {
-      jobRequirements = jobRes.value.value;
-      await tracker.updateStep('JOB_ANALYSIS_COMPLETE');
-    } else {
-      await tracker.updateStep('JOB_ANALYSIS_PARTIAL', 'Job analysis timed out, continuing with available data');
+    if (jobRequirements?.technical_skills?.length > 0) {
+      prompt += `Technical Skills Required: ${jobRequirements.technical_skills.slice(0, 10).join(', ')}\n`;
     }
 
-    let cvAnalysis: any = null;
-    if (cvRes.status === 'fulfilled' && cvRes.value.ok) {
-      cvAnalysis = cvRes.value.value;
-      await tracker.updateStep('CV_ANALYSIS_COMPLETE');
-    } else {
-      await tracker.updateStep('CV_ANALYSIS_PARTIAL', 'CV analysis timed out, continuing with available data');
+    if (cvAnalysis?.aiAnalysis?.experience?.length > 0) {
+      prompt += `Candidate Experience: ${cvAnalysis.aiAnalysis.experience.slice(0, 2).map((e: any) => `${e.role} at ${e.company}`).join(', ')}\n`;
     }
-    
-    logger.log('DATA_GATHERING_COMPLETE', 'CONCURRENT_SUCCESS', { 
-      companyInsightsFound: !!companyInsights,
-      jobRequirements: !!jobRequirements,
-      cvAnalysisFound: !!cvAnalysis,
-      companyInterviewStages: companyInsights?.interview_stages?.length || 0
+
+    prompt += `\nREQUIREMENTS:\n`;
+    prompt += `1. Generate EXACTLY ${targetCount} new ${category} questions\n`;
+    prompt += `2. Each question MUST be unique and different from existing questions\n`;
+    prompt += `3. Questions must reference specific company, job, or candidate details\n`;
+    prompt += `4. Questions must be tailored to ${targetSeniority || 'mid'}-level candidate\n`;
+    prompt += `5. NO generic questions - every question must be specific and actionable\n\n`;
+
+    prompt += `Return ONLY a JSON object with a "questions" array:\n`;
+    prompt += `{\n  "questions": [\n    {\n      "question": "Specific tailored question",\n      "difficulty": "easy|medium|hard",\n      "rationale": "Why this question would be asked",\n      "company_context": "How it relates to ${company}",\n      "confidence_score": 0.8\n    }\n  ]\n}\n`;
+
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openaiApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model,
+        response_format: { type: "json_object" },
+        messages: [
+          {
+            role: 'system',
+            content: 'You are an expert interview question generator. Generate highly tailored, specific interview questions. Return ONLY valid JSON - no markdown, no additional text.'
+          },
+          {
+            role: 'user',
+            content: prompt
+          }
+        ],
+        max_tokens: maxTokens,
+        temperature: 0.7
+      })
     });
 
-    // Step 2: Generate questions and conduct synthesis
-    await tracker.updateStep('QUESTION_GENERATION_START');
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`❌ Failed to generate additional ${category} questions:`, response.status, errorText);
+      return [];
+    }
+
+    const data = await response.json();
+    const rawContent = data.choices[0].message.content;
     
-    const synthesisResult = await executeWithTimeout(
-      () => conductInterviewSynthesis(
-        company, 
-        role, 
-        country, 
+    const { parseJsonResponse } = await import("../_shared/openai-client.ts");
+    const parsed = parseJsonResponse(rawContent, { questions: [] });
+
+    // Extract questions array
+    let questions: any[] = [];
+    if (Array.isArray(parsed)) {
+      questions = parsed;
+    } else if (parsed.questions && Array.isArray(parsed.questions)) {
+      questions = parsed.questions;
+    }
+
+    // Ensure all questions have required fields
+    questions = questions.map(q => ({
+      question: q.question || '',
+      category: category,
+      difficulty: q.difficulty || 'Medium',
+      rationale: q.rationale || '',
+      company_context: q.company_context || '',
+      confidence_score: q.confidence_score || 0.8,
+      star_story_fit: q.star_story_fit || false,
+      suggested_answer_approach: q.suggested_answer_approach || '',
+      evaluation_criteria: q.evaluation_criteria || [],
+      follow_up_questions: q.follow_up_questions || []
+    })).filter(q => q.question.trim().length > 0);
+
+    console.log(`✅ Generated ${questions.length} additional ${category} questions`);
+    return questions;
+
+  } catch (error) {
+    console.error(`❌ Error generating additional ${category} questions:`, error);
+    return [];
+  }
+}
+
+async function ensureMinimumQuestions(
+  synthesis: UnifiedSynthesisOutput,
+  company: string,
+  role: string | undefined,
+  targetSeniority: 'junior' | 'mid' | 'senior' | undefined,
+  companyInsights: any,
+  jobRequirements: any,
+  cvAnalysis: any,
+  openaiApiKey: string
+): Promise<UnifiedSynthesisOutput> {
+  const MIN_TOTAL = 30;
+  const MIN_PER_CATEGORY = 4;
+  const TARGET_PER_CATEGORY = 5;
+  const MAX_ITERATIONS = 2; // Limit iterations to avoid excessive API calls
+
+  let { total, byCategory } = countQuestions(synthesis.interview_questions_data);
+  
+  console.log(`\n📊 Question count check: ${total} total questions`);
+  console.log(`📋 Current breakdown:`, byCategory);
+
+  // If we already have enough, return early
+  if (total >= MIN_TOTAL) {
+    const allCategoriesHaveMinimum = Object.values(byCategory).every(count => count >= MIN_PER_CATEGORY);
+    if (allCategoriesHaveMinimum) {
+      console.log(`✅ Sufficient questions generated (${total} total)`);
+      return synthesis;
+    }
+  }
+
+  console.log(`\n🔄 Starting iterative question generation to reach minimum thresholds...`);
+
+  const allCategories = ['behavioral', 'technical', 'situational', 'company_specific', 'role_specific', 'experience_based', 'cultural_fit'];
+  let iteration = 0;
+
+  while (total < MIN_TOTAL && iteration < MAX_ITERATIONS) {
+    iteration++;
+    console.log(`\n📝 Iteration ${iteration}: Current total: ${total}, Target: ${MIN_TOTAL}`);
+
+    // Identify categories that need more questions
+    const categoriesToFill: Array<{ category: string; needed: number }> = [];
+    
+    allCategories.forEach(category => {
+      const currentCount = byCategory[category] || 0;
+      const target = Math.max(MIN_PER_CATEGORY, TARGET_PER_CATEGORY);
+      
+      if (currentCount < target) {
+        const needed = target - currentCount;
+        categoriesToFill.push({ category, needed });
+      }
+    });
+
+    // If total is still below minimum, prioritize categories with fewest questions
+    if (total < MIN_TOTAL) {
+      const additionalNeeded = MIN_TOTAL - total;
+      const sortedCategories = Object.entries(byCategory)
+        .sort(([, a], [, b]) => (a || 0) - (b || 0))
+        .map(([cat]) => cat);
+
+      // Distribute additional questions across categories
+      let remaining = additionalNeeded;
+      for (const category of sortedCategories) {
+        if (remaining <= 0) break;
+        
+        const currentCount = byCategory[category] || 0;
+        const needed = Math.min(3, Math.ceil(remaining / (sortedCategories.length - sortedCategories.indexOf(category))));
+        
+        const existing = categoriesToFill.find(c => c.category === category);
+        if (existing) {
+          existing.needed += needed;
+        } else {
+          categoriesToFill.push({ category, needed });
+        }
+        remaining -= needed;
+      }
+    }
+
+    // Generate additional questions for each category
+    const additionalQuestions: Record<string, any[]> = {};
+    
+    for (const { category, needed } of categoriesToFill) {
+      if (needed <= 0) continue;
+
+      const existing = Array.isArray(synthesis.interview_questions_data?.[category]) 
+        ? synthesis.interview_questions_data[category] 
+        : [];
+
+      const newQuestions = await generateAdditionalQuestionsForCategory(
+        category,
+        needed,
+        existing,
+        company,
+        role,
+        targetSeniority,
         companyInsights,
         jobRequirements,
         cvAnalysis,
         openaiApiKey
-      ),
-      CONCURRENT_TIMEOUTS.questionGeneration,
-      'AI Synthesis',
-      tracker
-    );
+      );
 
-    await tracker.updateStep('QUESTION_GENERATION_COMPLETE');
+      if (newQuestions.length > 0) {
+        additionalQuestions[category] = newQuestions;
+      }
+    }
 
-    // Step 3: Run comparison and question generation in parallel (optional enhancements)
-    console.log("Generating enhanced analysis...");
-    await tracker.updateStep('FINALIZING');
+    // Merge additional questions with existing ones
+    const mergedQuestions = { ...synthesis.interview_questions_data };
     
-    const [cvJobComparison, enhancedQuestions] = await Promise.all([
-      generateCVJobComparison(
-        searchId,
-        userId,
-        cvAnalysis?.aiAnalysis || cvAnalysis,
-        jobRequirements,
-        companyInsights
-      ),
-      generateEnhancedQuestions(
-        searchId,
-        userId,
-        companyInsights,
-        jobRequirements,
-        cvAnalysis?.aiAnalysis || cvAnalysis,
-        synthesisResult.interview_stages,
-        targetSeniority
-      )
-    ]);
-
-    console.log("Storing final results...");
-
-    // CHECKPOINT 1: Save interview stages immediately after synthesis
-    console.log("💾 CHECKPOINT 1: Saving interview stages and questions...");
-
-    // Step 5: Store interview stages and questions in database
-    for (const stage of synthesisResult.interview_stages) {
-      // Insert stage
-      const { data: stageData, error: stageError } = await supabase
-        .from("interview_stages")
-        .insert({
-          search_id: searchId,
-          name: stage.name,
-          duration: stage.duration,
-          interviewer: stage.interviewer,
-          content: stage.content,
-          guidance: `${stage.guidance}\n\nPreparation Tips:\n${stage.preparation_tips.join('\n')}\n\nRed Flags to Avoid:\n${stage.red_flags_to_avoid.join('\n')}`,
-          order_index: stage.order_index
-        })
-        .select()
-        .single();
-      
-      if (stageError) throw stageError;
-      
-      // Insert enhanced questions for this stage with dynamic categorization
-      const questionsToInsert = stage.common_questions.map((question, index) => ({
-        stage_id: stageData.id,
-        search_id: searchId,
-        question,
-        category: categorizeQuestion(question, stage.name),
-        question_type: 'common',
-        difficulty: determineDifficultyFromContext(question, jobRequirements, cvAnalysis, stage.name),
-        rationale: `${categorizeQuestion(question, stage.name)} question for ${stage.name} based on company research and industry standards`,
-        suggested_answer_approach: generateAnswerApproach(question, categorizeQuestion(question, stage.name)),
-        evaluation_criteria: generateEvaluationCriteria(categorizeQuestion(question, stage.name), companyInsights, jobRequirements),
-        follow_up_questions: [],
-        star_story_fit: isStarStoryFit(question),
-        company_context: generateCompanyContext(question, company, role, companyInsights),
-        confidence_score: calculateStageQuestionConfidence(question, companyInsights, stage.name)
-      }));
-      
-      const { error: questionsError } = await supabase
-        .from("interview_questions")
-        .insert(questionsToInsert);
-      
-      if (questionsError) throw questionsError;
-    }
-
-    // CHECKPOINT 2: Save CV analysis immediately
-    console.log("💾 CHECKPOINT 2: Saving CV analysis...");
-
-    // Step 6: Save CV analysis if provided
-    if (cv && cvAnalysis) {
-      try {
-        console.log("Saving CV analysis to resumes table...");
-        console.log("CV Analysis structure:", Object.keys(cvAnalysis));
-        
-        const resumeData = {
-          user_id: userId,
-          search_id: searchId,
-          content: cv,
-          parsed_data: cvAnalysis.parsedData || cvAnalysis // Use parsedData if available, otherwise fallback to cvAnalysis
-        };
-        
-        console.log("Resume data to save:", {
-          user_id: userId,
-          search_id: searchId,
-          content_length: cv.length,
-          has_parsed_data: !!(cvAnalysis.parsedData || cvAnalysis)
-        });
-        
-        const { data: resumeResult, error: resumeError } = await supabase
-          .from("resumes")
-          .insert(resumeData)
-          .select()
-          .single();
-          
-        if (resumeError) {
-          console.error("Error saving resume:", resumeError);
-          throw resumeError;
-        }
-        
-        console.log("Successfully saved resume with ID:", resumeResult.id);
-        logger.log('CV_SAVED', 'DATABASE', { 
-          resumeId: resumeResult.id,
-          userId,
-          searchId,
-          hasStructuredData: !!resumeResult.full_name
-        });
-        
-      } catch (error) {
-        console.error("Failed to save CV analysis:", error);
-        logger.log('CV_SAVE_ERROR', 'DATABASE', { error: error.message, userId, searchId });
-        // Continue processing even if CV save fails
+    Object.entries(additionalQuestions).forEach(([category, questions]) => {
+      if (!mergedQuestions[category]) {
+        mergedQuestions[category] = [];
       }
-    } else {
-      console.log("Skipping CV save - cv:", !!cv, "cvAnalysis:", !!cvAnalysis);
-    }
-
-    // CHECKPOINT 3: Save enhanced analysis
-    console.log("💾 CHECKPOINT 3: Saving enhanced analysis and comparisons...");
-
-    // Step 7: Store enhanced question bank and comparison data
-    if (cvJobComparison) {
-      try {
-        const { data, error } = await supabase
-          .from("cv_job_comparisons")
-          .upsert({
-            search_id: searchId,
-            user_id: userId,
-            skill_gap_analysis: cvJobComparison.skill_gap_analysis,
-            experience_gap_analysis: cvJobComparison.experience_gap_analysis,
-            personalized_story_bank: cvJobComparison.personalized_story_bank,
-            interview_prep_strategy: cvJobComparison.interview_prep_strategy,
-            overall_fit_score: cvJobComparison.overall_fit_score,
-            preparation_priorities: cvJobComparison.preparation_priorities
-          }, {
-            onConflict: 'search_id'
-          });
-
-        if (error) {
-          console.error("❌ CV Job Comparison upsert error:", {
-            code: error.code,
-            message: error.message,
-            details: error.details,
-            hint: error.hint
-          });
-          throw error;
-        }
-
-        console.log("✅ Successfully saved CV job comparison");
-      } catch (dbError) {
-        console.error("Failed to save CV job comparison:", dbError);
-        // Log but continue - comparison save failure shouldn't block completion
-        logger.log('CV_COMPARISON_SAVE_ERROR', 'DATABASE', {
-          error: dbError.message,
-          userId,
-          searchId
-        });
-      }
-    }
-
-    // Store enhanced questions in the consolidated interview_questions table
-    if (enhancedQuestions && enhancedQuestions.length > 0) {
-      for (const stageQuestions of enhancedQuestions) {
-        try {
-          // Get the stage_id for this stage name
-          const { data: stage, error: stageError } = await supabase
-            .from("interview_stages")
-            .select("id")
-            .eq("search_id", searchId)
-            .eq("name", stageQuestions.stage)
-            .single();
-
-          if (stageError || !stage) {
-            console.warn(`Stage not found for ${stageQuestions.stage}, skipping enhanced questions`);
-            continue;
-          }
-
-          // Prepare all questions for batch insert
-          const questionsToInsert = [];
-          
-          // Helper function to add questions from a category with dynamic values
-          const addQuestionsFromCategory = (questions: any[], category: string) => {
-            questions.forEach((q: any) => {
-              questionsToInsert.push({
-                stage_id: stage.id,
-                search_id: searchId,
-                question: q.question,
-                category: category,
-                question_type: q.type || category,
-                difficulty: determineDifficulty(q, jobRequirements, cvAnalysis),
-                rationale: q.rationale || `${category} question for ${stage.name} stage`,
-                suggested_answer_approach: q.suggested_answer_approach || generateAnswerApproach(q.question, category),
-                evaluation_criteria: q.evaluation_criteria || generateEvaluationCriteria(category, companyInsights, jobRequirements),
-                follow_up_questions: q.follow_up_questions || [],
-                star_story_fit: q.star_story_fit || isStarStoryFit(q.question),
-                company_context: q.company_context || `${category} question for ${company} ${role || ''} interview`,
-                confidence_score: calculateConfidenceScore(q, companyInsights, category)
-              });
-            });
-          };
-
-          // Add questions from all categories
-          if (stageQuestions.questions.behavioral_questions) {
-            addQuestionsFromCategory(stageQuestions.questions.behavioral_questions, 'behavioral');
-          }
-          if (stageQuestions.questions.technical_questions) {
-            addQuestionsFromCategory(stageQuestions.questions.technical_questions, 'technical');
-          }
-          if (stageQuestions.questions.situational_questions) {
-            addQuestionsFromCategory(stageQuestions.questions.situational_questions, 'situational');
-          }
-          if (stageQuestions.questions.company_specific_questions) {
-            addQuestionsFromCategory(stageQuestions.questions.company_specific_questions, 'company_specific');
-          }
-          if (stageQuestions.questions.role_specific_questions) {
-            addQuestionsFromCategory(stageQuestions.questions.role_specific_questions, 'role_specific');
-          }
-          if (stageQuestions.questions.experience_based_questions) {
-            addQuestionsFromCategory(stageQuestions.questions.experience_based_questions, 'experience_based');
-          }
-          if (stageQuestions.questions.cultural_fit_questions) {
-            addQuestionsFromCategory(stageQuestions.questions.cultural_fit_questions, 'cultural_fit');
-          }
-
-          // Batch insert all questions
-          if (questionsToInsert.length > 0) {
-            const { error: insertError } = await supabase
-              .from("interview_questions")
-              .insert(questionsToInsert);
-
-            if (insertError) {
-              console.warn(`Failed to save enhanced questions for stage ${stageQuestions.stage}:`, insertError);
-            } else {
-              console.log(`Saved ${questionsToInsert.length} enhanced questions for stage ${stageQuestions.stage}`);
-            }
-          }
-        } catch (dbError) {
-          console.warn(`Failed to save enhanced questions for stage ${stageQuestions.stage}:`, dbError);
-        }
-      }
-    }
-
-    // Step 8: Update search status to completed
-    try {
-      const { error: updateError } = await supabase
-        .from("searches")
-        .update({
-          search_status: "completed",
-          cv_job_comparison: cvJobComparison,
-          preparation_priorities: cvJobComparison?.preparation_priorities || [],
-          overall_fit_score: cvJobComparison?.overall_fit_score || 0
-        })
-        .eq("id", searchId);
-
-      if (updateError) {
-        console.error("❌ Status update error:", {
-          code: updateError.code,
-          message: updateError.message,
-          details: updateError.details
-        });
-        throw updateError;
-      }
-
-      console.log("✅ Successfully updated search status to completed");
-    } catch (updateError) {
-      console.error("Failed to update search status:", updateError);
-      // Even if status update fails, still mark as completed in progress tracker
-      // so frontend knows research is done
-    }
-
-    // Mark research as completed
-    await tracker.markCompleted('Research completed successfully!');
-    
-    logger.log('RESEARCH_COMPLETE', 'SUCCESS', { 
-      totalQuestions: enhancedQuestions?.length || 0,
-      processingTimeMs: Date.now() - (new Date().getTime())
+      mergedQuestions[category] = [
+        ...(Array.isArray(mergedQuestions[category]) ? mergedQuestions[category] : []),
+        ...questions
+      ];
     });
-    
-    console.log('✅ Research completed successfully for', company);
 
+    // Update synthesis
+    synthesis.interview_questions_data = mergedQuestions;
+    
+    // Recalculate counts
+    const newCounts = countQuestions(synthesis.interview_questions_data);
+    total = newCounts.total;
+    byCategory = newCounts.byCategory;
+
+    console.log(`✅ Iteration ${iteration} complete: ${total} total questions`);
+    console.log(`📋 Updated breakdown:`, byCategory);
+  }
+
+  if (total < MIN_TOTAL) {
+    console.warn(`⚠️ Still below minimum (${total} < ${MIN_TOTAL}) after ${iteration} iterations, but continuing with available questions`);
+  } else {
+    console.log(`✅ Reached minimum threshold: ${total} total questions`);
+  }
+
+  return synthesis;
+}
+
+function getUnifiedSynthesisSchema(): any {
+  return {
+    interview_stages: [
+      {
+        name: "Stage Name",
+        order_index: 1,
+        duration: "Duration estimate",
+        interviewer: "Who conducts",
+        content: "What to expect",
+        guidance: "How to approach",
+        preparation_tips: ["tip1", "tip2"],
+        common_questions: ["question1", "question2"],
+        red_flags_to_avoid: ["flag1", "flag2"]
+      }
+    ],
+    comparison_analysis: {
+      skill_gap_analysis: {
+        matching_skills: {
+          technical: ["skill1"],
+          soft: ["skill1"],
+          certifications: ["cert1"]
+        },
+        missing_skills: {
+          technical: ["skill1"],
+          soft: ["skill1"]
+        },
+        skill_match_percentage: {
+          technical: 0,
+          soft: 0,
+          overall: 0
+        }
+      },
+      experience_gap_analysis: {
+        relevant_experience: [
+          { experience: "Experience", relevance_score: 0.8, how_to_highlight: "How to present" }
+        ],
+        missing_experience: [
+          { requirement: "Requirement", severity: "low|medium|high", mitigation_strategy: "How to address" }
+        ]
+      },
+      personalized_story_bank: {
+        stories: [
+          { situation: "S", task: "T", action: "A", result: "R", applicable_questions: [], impact_quantified: "Impact" }
+        ]
+      },
+      interview_prep_strategy: {
+        strengths_to_emphasize: ["strength1"],
+        weaknesses_to_address: ["weakness1"],
+        competitive_positioning: { unique_value_proposition: "USP", differentiation_points: [] }
+      },
+      overall_fit_score: 0
+    },
+    interview_questions_data: {
+      behavioral: [
+        {
+          question: "Specific behavioral question",
+          category: "behavioral",
+          difficulty: "easy|medium|hard",
+          star_story_fit: true,
+          company_context: "How it relates to company",
+          confidence_score: 0.9
+        }
+      ],
+      technical: [],
+      situational: [],
+      company_specific: [],
+      role_specific: [],
+      experience_based: [],
+      cultural_fit: []
+    },
+    preparation_guidance: {
+      preparation_timeline: {
+        weeks_before: ["task1"],
+        week_before: ["task1"],
+        day_before: ["task1"],
+        day_of: ["task1"]
+      },
+      preparation_priorities: ["priority1"],
+      personalized_guidance: {
+        strengths_to_highlight: ["strength1"],
+        areas_to_improve: ["area1"],
+        suggested_stories: ["story1"]
+      }
+    }
+  };
+}
+
+// ============================================================
+// PHASE 3: Database Operations with Timeout Protection
+// ============================================================
+
+async function withDbTimeout<T>(
+  operation: () => Promise<T>,
+  label: string,
+  timeoutMs: number = 30000
+): Promise<T | null> {
+  try {
+    const timeoutPromise = new Promise<null>((_, reject) =>
+      setTimeout(() => reject(new Error(`Database timeout: ${label}`)), timeoutMs)
+    );
+    return await Promise.race([operation(), timeoutPromise as Promise<T>]);
   } catch (error) {
-    console.error('❌ Research processing failed:', error);
-    await tracker.markFailed(error.message);
+    console.error(`❌ DB operation failed (${label}):`, error);
     throw error;
   }
 }
 
+async function saveToDatabase(
+  supabase: any,
+  searchId: string,
+  userId: string,
+  rawData: RawResearchData,
+  synthesis: UnifiedSynthesisOutput
+) {
+  try {
+    console.log("💾 Saving to database...");
+
+    // CHECKPOINT 1: Save raw research data to search_artifacts
+    console.log("  → Saving raw research data...");
+    const rawSaveResult = await withDbTimeout(
+      async () => {
+        const { data, error } = await supabase
+          .from('search_artifacts')
+          .update({
+            company_research_raw: rawData.company_research_raw,
+            job_analysis_raw: rawData.job_analysis_raw,
+            cv_analysis_raw: rawData.cv_analysis_raw,
+            processing_status: 'raw_data_saved',
+            processing_raw_save_at: new Date().toISOString()
+          })
+          .eq('search_id', searchId)
+          .select();
+
+        if (error) throw error;
+        return data;
+      },
+      'Update raw data in search_artifacts'
+    );
+
+    if (!rawSaveResult || rawSaveResult.length === 0) {
+      console.warn("⚠️ Raw data update touched no rows, attempting insert fallback...");
+      await withDbTimeout(
+        async () => {
+          const { error } = await supabase
+            .from('search_artifacts')
+            .insert({
+              search_id: searchId,
+              user_id: userId,
+              company_research_raw: rawData.company_research_raw,
+              job_analysis_raw: rawData.job_analysis_raw,
+              cv_analysis_raw: rawData.cv_analysis_raw,
+              interview_stages: synthesis.interview_stages || [],
+              processing_status: 'raw_data_saved',
+              processing_raw_save_at: new Date().toISOString()
+            });
+
+          if (error) throw error;
+          return true;
+        },
+        'Insert raw data fallback'
+      );
+    } else {
+      console.log("✅ Raw data saved");
+    }
+
+    // CHECKPOINT 2: Save synthesis results to search_artifacts
+    console.log("  → Saving synthesis results...");
+    const synthesisSaveResult = await withDbTimeout(
+      async () => {
+        // Use upsert to ensure the row exists (handles both insert and update)
+        const { data, error } = await supabase
+          .from('search_artifacts')
+          .upsert({
+            search_id: searchId,
+            user_id: userId,
+            interview_stages: synthesis.interview_stages,
+            synthesis_metadata: synthesis.synthesis_metadata,
+            comparison_analysis: synthesis.comparison_analysis,
+            interview_questions_data: synthesis.interview_questions_data,
+            preparation_guidance: synthesis.preparation_guidance,
+            processing_status: 'complete',
+            processing_synthesis_end_at: new Date().toISOString(),
+            processing_completed_at: new Date().toISOString()
+          }, { onConflict: 'search_id' })
+          .select();
+
+        if (error) {
+          console.error("❌ Synthesis save error:", error);
+          throw error;
+        }
+        return data;
+      },
+      'Save synthesis to search_artifacts',
+      45000 // Increased timeout for large data
+    );
+
+    if (!synthesisSaveResult || synthesisSaveResult.length === 0) {
+      console.error("❌ Synthesis save failed - no data returned");
+      throw new Error("Failed to save synthesis results to database");
+    } else {
+      console.log("✅ Synthesis saved");
+    }
+
+    // CHECKPOINT 3: Insert interview stages for UI display
+    console.log("  → Saving interview stages...");
+    const stageRecords = await withDbTimeout(
+      async () => {
+        const stagesToInsert = (synthesis.interview_stages || []).map((stage: any, index: number) => ({
+          search_id: searchId,
+          name: stage.name,
+          order_index: stage.order_index || index + 1,
+          duration: stage.duration,
+          interviewer: stage.interviewer,
+          content: stage.content,
+          guidance: stage.guidance,
+          preparation_tips: stage.preparation_tips || [],
+          common_questions: stage.common_questions || [],
+          red_flags_to_avoid: stage.red_flags_to_avoid || []
+        }));
+
+        if (stagesToInsert.length === 0) return [];
+
+        const { data, error } = await supabase
+          .from('interview_stages')
+          .insert(stagesToInsert)
+          .select();
+
+        if (error) throw error;
+        return data;
+      },
+      'Insert interview stages'
+    );
+
+    const stageIdByOrder: Record<number, string> = {};
+    (stageRecords || []).forEach((stage: any) => {
+      if (stage.order_index) stageIdByOrder[stage.order_index] = stage.id;
+    });
+
+    console.log(`✅ Interview stages saved (${(stageRecords || []).length})`);
+
+    // CHECKPOINT 4: Insert interview questions
+    console.log("  → Saving interview questions...");
+    
+    // Calculate total questions count before insertion
+    let totalQuestionsCount = 0;
+    if (synthesis.interview_questions_data) {
+      Object.values(synthesis.interview_questions_data).forEach((questions: any) => {
+        if (Array.isArray(questions)) {
+          totalQuestionsCount += questions.length;
+        }
+      });
+    }
+    
+    await withDbTimeout(
+      async () => {
+        if (!stageRecords || stageRecords.length === 0) {
+          throw new Error("No interview stages were inserted; cannot attach questions");
+        }
+
+        const questionsToInsert: any[] = [];
+
+        const getStageIdForCategory = (category: string) => {
+          if (stageIdByOrder[1] && ['behavioral', 'cultural_fit'].includes(category)) return stageIdByOrder[1];
+          if (stageIdByOrder[2] && ['technical', 'role_specific'].includes(category)) return stageIdByOrder[2];
+          if (stageIdByOrder[3] && ['situational', 'experience_based'].includes(category)) return stageIdByOrder[3];
+          if (stageIdByOrder[4]) return stageIdByOrder[4];
+          return Object.values(stageIdByOrder)[0] || null;
+        };
+
+        const normalizeDifficulty = (difficulty?: string) => {
+          if (!difficulty) return 'Medium';
+          const d = difficulty.toLowerCase();
+          if (d === 'easy' || d === 'medium' || d === 'hard') {
+            return d.charAt(0).toUpperCase() + d.slice(1);
+          }
+          return 'Medium';
+        };
+
+        if (synthesis.interview_questions_data) {
+          // Log question counts before inserting
+          const questionCounts: Record<string, number> = {};
+          Object.entries(synthesis.interview_questions_data).forEach(([category, questions]: [string, any]) => {
+            questionCounts[category] = Array.isArray(questions) ? questions.length : 0;
+          });
+          const totalQuestions = Object.values(questionCounts).reduce((sum, count) => sum + count, 0);
+          console.log(`📝 Preparing to insert ${totalQuestions} questions:`, questionCounts);
+          
+          Object.entries(synthesis.interview_questions_data).forEach(([category, questions]: [string, any]) => {
+            if (Array.isArray(questions)) {
+              questions.forEach((q: any) => {
+                const stageId = getStageIdForCategory(category);
+                if (!stageId) {
+                  throw new Error(`Missing stage_id when inserting questions for category ${category}`);
+                }
+                questionsToInsert.push({
+                  search_id: searchId,
+                  stage_id: stageId,
+                  question: q.question,
+                  category: category,
+                  question_type: 'synthesized',
+                  difficulty: normalizeDifficulty(q.difficulty),
+                  rationale: q.rationale || '',
+                  suggested_answer_approach: q.suggested_answer_approach || '',
+                  evaluation_criteria: q.evaluation_criteria || [],
+                  follow_up_questions: q.follow_up_questions || [],
+                  star_story_fit: q.star_story_fit || false,
+                  company_context: q.company_context || '',
+                  confidence_score: q.confidence_score || 0.8
+                });
+              });
+            }
+          });
+        }
+
+        if (questionsToInsert.length === 0) return null;
+
+        const { data, error } = await supabase
+          .from('interview_questions')
+          .insert(questionsToInsert);
+
+        if (error) throw error;
+        return data;
+      },
+      'Insert interview questions'
+    );
+
+    console.log(`✅ Interview questions saved: ${totalQuestionsCount} questions`);
+    if (totalQuestionsCount < 20) {
+      console.warn(`⚠️ WARNING: Only ${totalQuestionsCount} questions were saved. Expected 30-50 questions.`);
+    }
+
+    // CHECKPOINT 5: Update search status
+    console.log("  → Updating search status...");
+    await withDbTimeout(
+      async () => {
+        const { data, error } = await supabase
+          .from('searches')
+          .update({
+            search_status: 'completed',
+            overall_fit_score: synthesis.comparison_analysis?.overall_fit_score || 0,
+            preparation_priorities: synthesis.preparation_guidance?.preparation_priorities || [],
+            cv_job_comparison: synthesis.comparison_analysis
+          })
+          .eq('id', searchId);
+
+        if (error) throw error;
+        return data;
+      },
+      'Update searches table'
+    );
+
+    console.log("✅ Search status updated");
+    console.log("✅ All data saved successfully!");
+
+  } catch (error) {
+    console.error("❌ Database save error:", error);
+    throw error;
+  }
+}
+
+// ============================================================
+// MAIN HANDLER
+// ============================================================
+
+serve(async (req: Request) => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+
+  const tracker = new ProgressTracker("");
+  let searchId = "";
+  let userId = "";
+  let logger: SearchLogger | null = null;
+
+  try {
+    const requestData: InterviewResearchRequest = await req.json();
+
+    searchId = requestData.searchId;
+    userId = requestData.userId;
+    tracker.searchId = searchId;
+    logger = new SearchLogger(searchId, "interview-research", userId);
+
+    logger.log("REQUEST_RECEIVED", "INIT", {
+      company: requestData.company,
+      role: requestData.role,
+      country: requestData.country,
+      targetSeniority: requestData.targetSeniority,
+      roleLinkCount: requestData.roleLinks?.length || 0,
+    });
+
+    console.log(`\n🚀 Starting interview research for search: ${searchId}`);
+    console.log(`   Company: ${requestData.company}`);
+    console.log(`   Role: ${requestData.role || 'Not specified'}`);
+    console.log(`   Seniority: ${requestData.targetSeniority || 'Not specified'}`);
+
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL") || "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "",
+    );
+
+    const openaiApiKey = Deno.env.get("OPENAI_API_KEY") || "";
+
+    // ============================================================
+    // PHASE 1: Concurrent Data Gathering (20-30 seconds)
+    // ============================================================
+
+    console.log("\n📊 PHASE 1: Gathering research data...");
+    logger?.log("PHASE_START", "DATA_GATHERING");
+    await tracker.updateStep('DATA_GATHERING_START');
+
+    const [companyInsights, jobRequirements, cvAnalysis] = await Promise.allSettled([
+      gatherCompanyData(requestData.company, requestData.role, requestData.country, searchId),
+      gatherJobData(requestData.roleLinks || [], searchId, requestData.company, requestData.role),
+      gatherCVData(requestData.cv || "", userId)
+    ]).then(results => [
+      results[0].status === 'fulfilled' ? results[0].value : null,
+      results[1].status === 'fulfilled' ? results[1].value : null,
+      results[2].status === 'fulfilled' ? results[2].value : null
+    ]);
+
+    console.log("\n✅ PHASE 1 Complete");
+    logger?.log("PHASE_COMPLETE", "DATA_GATHERING", {
+      hasCompanyInsights: !!companyInsights,
+      hasJobRequirements: !!jobRequirements,
+      hasCvAnalysis: !!cvAnalysis
+    });
+    await tracker.updateStep('DATA_GATHERING_COMPLETE');
+
+    // ============================================================
+    // Save raw data immediately to search_artifacts
+    // ============================================================
+
+    console.log("\n💾 PHASE 2: Saving raw research data...");
+    logger?.log("PHASE_START", "RAW_DATA_SAVE");
+
+    const rawData: RawResearchData = {
+      company_research_raw: companyInsights,
+      job_analysis_raw: jobRequirements,
+      cv_analysis_raw: cvAnalysis
+    };
+
+    await withDbTimeout(
+      async () => {
+        const { error } = await supabase
+          .from('search_artifacts')
+          .upsert({
+            search_id: searchId,
+            user_id: userId,
+            ...rawData,
+            interview_stages: [],
+            processing_status: 'raw_data_saved',
+            processing_started_at: new Date().toISOString(),
+            processing_raw_save_at: new Date().toISOString()
+          }, { onConflict: 'search_id' });
+
+        if (error) {
+          console.warn("⚠️ Failed to save raw data:", error.message);
+          return null;
+        }
+        return true;
+      },
+      'Save raw data'
+    );
+
+    console.log("✅ Raw data saved to database");
+    logger?.log("PHASE_COMPLETE", "RAW_DATA_SAVE");
+
+    // ============================================================
+    // PHASE 3: Unified Synthesis (20-30 seconds)
+    // ============================================================
+
+    console.log("\n🔄 PHASE 3: Unified synthesis...");
+    logger?.log("PHASE_START", "UNIFIED_SYNTHESIS");
+    await tracker.updateStep('AI_SYNTHESIS_START');
+
+    const synthesis = await unifiedSynthesis(
+      requestData.company,
+      requestData.role,
+      requestData.country,
+      requestData.targetSeniority,
+      companyInsights,
+      jobRequirements,
+      cvAnalysis,
+      openaiApiKey
+    );
+
+    if (!synthesis) {
+      logger?.log("PHASE_FAILED", "UNIFIED_SYNTHESIS", null, "Synthesis returned null");
+      throw new Error("Synthesis failed");
+    }
+
+    // ============================================================
+    // ITERATIVE QUESTION GENERATION: Ensure minimum question count
+    // ============================================================
+    
+    console.log("\n🔍 Checking question count and generating additional questions if needed...");
+    await tracker.updateStep('QUESTION_VALIDATION_START');
+    
+    const finalSynthesis = await ensureMinimumQuestions(
+      synthesis,
+      requestData.company,
+      requestData.role,
+      requestData.targetSeniority,
+      companyInsights,
+      jobRequirements,
+      cvAnalysis,
+      openaiApiKey
+    );
+
+    const { total: finalTotal, byCategory: finalByCategory } = countQuestions(finalSynthesis.interview_questions_data);
+    console.log("✅ PHASE 3 Complete");
+    logger?.log("PHASE_COMPLETE", "UNIFIED_SYNTHESIS", {
+      stageCount: finalSynthesis.interview_stages?.length || 0,
+      questionCategories: Object.keys(finalSynthesis.interview_questions_data || {}),
+      totalQuestions: finalTotal,
+      questionBreakdown: finalByCategory
+    });
+    await tracker.updateStep('AI_SYNTHESIS_COMPLETE');
+
+    // ============================================================
+    // PHASE 4: Save all results to database
+    // ============================================================
+
+    console.log("\n💾 PHASE 4: Saving all results to database...");
+    logger?.log("PHASE_START", "DATABASE_SAVE");
+    await tracker.updateStep('QUESTION_GENERATION_START');
+
+    await saveToDatabase(supabase, searchId, userId, rawData, finalSynthesis);
+
+    console.log("✅ PHASE 4 Complete");
+    logger?.log("PHASE_COMPLETE", "DATABASE_SAVE");
+    await tracker.updateStep('QUESTION_GENERATION_COMPLETE');
+
+    // ============================================================
+    // Success response
+    // ============================================================
+
+    console.log(`\n✅ Interview research complete for search: ${searchId}`);
+    logger?.log("FUNCTION_SUCCESS", "COMPLETE");
+
+    await tracker.markCompleted();
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        searchId,
+        status: 'completed',
+        message: 'Interview research completed successfully'
+      }),
+      {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      }
+    );
+
+  } catch (error) {
+    console.error("❌ Error in interview-research:", error);
+    logger?.log(
+      "FUNCTION_ERROR",
+      "GLOBAL",
+      null,
+      error instanceof Error ? error.message : String(error)
+    );
+
+    if (searchId && userId) {
+      // Mark search as failed in database
+      const supabase = createClient(
+        Deno.env.get("SUPABASE_URL") || "",
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "",
+      );
+
+      try {
+        await supabase
+          .from('searches')
+          .update({
+            search_status: 'failed',
+            error_message: error instanceof Error ? error.message : 'Unknown error'
+          })
+          .eq('id', searchId);
+      } catch (markError) {
+        console.error("Failed to mark search as failed:", markError);
+      }
+    }
+
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      }
+    );
+  } finally {
+    if (logger) {
+      try {
+        await logger.saveToFile();
+      } catch (logError) {
+        console.error("Failed to persist search logger output:", logError);
+      }
+    }
+  }
+});

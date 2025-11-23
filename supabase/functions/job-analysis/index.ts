@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.43.2";
+import { getOpenAIModel } from "../_shared/config.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -160,7 +161,7 @@ async function analyzeJobRequirements(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'gpt-4o-mini',
+      model: getOpenAIModel('jobAnalysis'),
       messages: [
         {
           role: 'system',
@@ -185,7 +186,6 @@ You MUST return ONLY valid JSON in this exact structure - no markdown, no additi
         }
       ],
       max_tokens: 2000,
-      temperature: 0.3,
     }),
   });
 
@@ -197,12 +197,9 @@ You MUST return ONLY valid JSON in this exact structure - no markdown, no additi
   const analysisResult = data.choices[0].message.content;
   
   try {
-    return JSON.parse(analysisResult);
-  } catch (parseError) {
-    console.error("Failed to parse job analysis JSON:", parseError);
-    
-    // Return fallback structure
-    return {
+    // Use shared JSON parsing utility that handles markdown code blocks
+    const { parseJsonResponse } = await import("../_shared/openai-client.ts");
+    const fallback: JobRequirements = {
       technical_skills: [],
       soft_skills: [],
       experience_level: "Experience level not specified",
@@ -212,6 +209,11 @@ You MUST return ONLY valid JSON in this exact structure - no markdown, no additi
       company_benefits: [],
       interview_process_hints: []
     };
+    return parseJsonResponse(analysisResult, fallback);
+  } catch (parseError) {
+    console.error("Failed to parse job analysis JSON:", parseError);
+    // Fallback already handled by parseJsonResponse
+    throw parseError;
   }
 }
 

@@ -141,22 +141,65 @@ export function useSearchProgress(
   // Realtime subscription to progress updates for this search row
   useEffect(() => {
     if (!searchId) return;
-    const channel = supabase
-      .channel(`searches-progress-${searchId}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'searches', filter: `id=eq.${searchId}` },
-        (payload) => {
-          const row: any = (payload as any).new ?? (payload as any).record;
-          if (row) {
-            queryClient.setQueryData(['search-progress', searchId], row);
+    
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    
+    try {
+      channel = supabase
+        .channel(`searches-progress-${searchId}`, {
+          config: {
+            broadcast: { self: false },
+            presence: { key: searchId }
           }
-        }
-      )
-      .subscribe();
+        })
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'searches', filter: `id=eq.${searchId}` },
+          (payload) => {
+            try {
+              const row: any = (payload as any).new ?? (payload as any).record;
+              if (row) {
+                // Map DB row to SearchProgress interface
+                const progressData: SearchProgress = {
+                  id: row.id,
+                  status: (row.search_status || 'pending') as SearchProgress['status'],
+                  progress_step: row.progress_step || '',
+                  progress_percentage: row.progress_percentage || 0,
+                  error_message: row.error_message || undefined,
+                  started_at: row.started_at || undefined,
+                  completed_at: row.completed_at || undefined,
+                  created_at: row.created_at,
+                  updated_at: row.updated_at,
+                };
+                queryClient.setQueryData(['search-progress', searchId], progressData);
+              }
+            } catch (error) {
+              console.error('Error processing Realtime update:', error);
+            }
+          }
+        )
+        .subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            // Successfully subscribed
+          } else if (status === 'CHANNEL_ERROR') {
+            console.warn('Realtime channel error, falling back to polling only');
+          } else if (status === 'TIMED_OUT') {
+            console.warn('Realtime subscription timed out, falling back to polling only');
+          }
+        });
+    } catch (error) {
+      console.error('Failed to set up Realtime subscription:', error);
+      // Continue with polling only if Realtime fails
+    }
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        try {
+          supabase.removeChannel(channel);
+        } catch (error) {
+          console.error('Error removing Realtime channel:', error);
+        }
+      }
     };
   }, [searchId, queryClient]);
 
