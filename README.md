@@ -48,7 +48,6 @@ All documentation now lives in a single navigation surface so you don't need to 
 | Document | Why you need it | Notes |
 |----------|-----------------|-------|
 | [`CLAUDE.md`](./CLAUDE.md) | End-to-end developer playbook | Start here for architecture, commands, and workflows. |
-| [`docs/DEPLOYMENT_GUIDE.md`](./docs/DEPLOYMENT_GUIDE.md) | Deploying to Supabase (DB + Edge Functions) | Step-by-step instructions with troubleshooting. |
 | [`docs/RESEARCH_PIPELINE_IMPROVEMENTS.md`](./docs/RESEARCH_PIPELINE_IMPROVEMENTS.md) | Pipeline optimization backlog | Use for planning perf work. |
 | [`docs/UI_UX_ENHANCEMENT_PLAN.md`](./docs/UI_UX_ENHANCEMENT_PLAN.md) | Design backlog and heuristics | Reference when shipping UI polish. |
 
