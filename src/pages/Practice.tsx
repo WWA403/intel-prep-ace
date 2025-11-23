@@ -38,6 +38,10 @@ import { sessionSampler } from "@/services/sessionSampler";
 import { useAuth } from "@/hooks/useAuth";
 import { SessionSummary } from "@/components/SessionSummary";
 
+const SWIPE_THRESHOLD_PX = 80;
+const VERTICAL_SCROLL_SUPPRESSION_DELTA = 18;
+const VERTICAL_SWIPE_THRESHOLD_PX = 80;
+
 interface EnhancedQuestion {
   question: string;
   type: string;
@@ -140,6 +144,10 @@ const Practice = () => {
   
   // Session state: 'setup' | 'inProgress' | 'completed'
   const [sessionState, setSessionState] = useState<'setup' | 'inProgress' | 'completed'>('setup');
+  const hasDismissedSwipeHintRef = useRef(false);
+  const [shouldShowSwipeHint, setShouldShowSwipeHint] = useState(true);
+  const [isVerticalScrollGuarded, setIsVerticalScrollGuarded] = useState(false);
+  const swipeUpReadyRef = useRef(false);
   
   // Voice recording states
   const [isRecording, setIsRecording] = useState(false);
@@ -375,6 +383,20 @@ const Practice = () => {
     }
   }, [currentIndex]);
 
+  useEffect(() => {
+    if (sessionState !== 'inProgress') {
+      setShouldShowSwipeHint(false);
+      return;
+    }
+
+    if (currentIndex === 0 && !hasDismissedSwipeHintRef.current) {
+      setShouldShowSwipeHint(true);
+    } else if (currentIndex > 0 && !hasDismissedSwipeHintRef.current) {
+      hasDismissedSwipeHintRef.current = true;
+      setShouldShowSwipeHint(false);
+    }
+  }, [currentIndex, sessionState]);
+
   // Recording timer
   useEffect(() => {
     if (isRecording && recordingIntervalRef.current === null) {
@@ -393,6 +415,17 @@ const Practice = () => {
       }
     };
   }, [isRecording]);
+
+  const hideSwipeHint = () => {
+    if (!hasDismissedSwipeHintRef.current) {
+      hasDismissedSwipeHintRef.current = true;
+    }
+    setShouldShowSwipeHint(false);
+  };
+
+  const handleDismissSwipeHint = () => {
+    hideSwipeHint();
+  };
 
   const handleStageToggle = (stageId: string) => {
     const updatedStages = allStages.map(stage => 
@@ -475,6 +508,10 @@ const Practice = () => {
     setAppliedDifficulties(tempDifficulties);
     setAppliedShuffle(tempShuffle);
     setShowFavoritesOnly(tempShowFavoritesOnly);
+    hasDismissedSwipeHintRef.current = false;
+    setShouldShowSwipeHint(true);
+    setIsVerticalScrollGuarded(false);
+    swipeUpReadyRef.current = false;
     
     setUseSampling(true);
     setSessionState('inProgress');
@@ -498,6 +535,10 @@ const Practice = () => {
     setTempDifficulties([]);
     setTempShuffle(false);
     setTempShowFavoritesOnly(false);
+    hasDismissedSwipeHintRef.current = false;
+    setShouldShowSwipeHint(false);
+    setIsVerticalScrollGuarded(false);
+    swipeUpReadyRef.current = false;
   };
   
   const toggleCategory = (category: string) => {
@@ -647,18 +688,29 @@ const Practice = () => {
 
   // Swipe handlers
   const handleSwipeLeft = () => {
+    if (isVerticalScrollGuarded) {
+      setIsVerticalScrollGuarded(false);
+      return;
+    }
+    hideSwipeHint();
     if (currentIndex < questions.length - 1) {
       skipQuestion();
     }
   };
 
   const handleSwipeRight = () => {
+    if (isVerticalScrollGuarded) {
+      setIsVerticalScrollGuarded(false);
+      return;
+    }
+    hideSwipeHint();
     if (currentQuestion) {
       handleToggleFlag(currentQuestion.id, 'favorite');
     }
   };
 
   const handleSwipeUp = () => {
+    hideSwipeHint();
     setShowGuidance(!showGuidance);
   };
 
@@ -673,15 +725,30 @@ const Practice = () => {
   const swipeHandlers = useSwipeable({
     onSwiping: (eventData) => {
       const { dir, deltaX, deltaY } = eventData;
-      // Only track horizontal swipes for left/right, vertical for up
-      if (Math.abs(deltaX) > Math.abs(deltaY)) {
-        if (dir === 'Left' || dir === 'Right') {
-          setSwipeDirection(dir.toLowerCase() as 'left' | 'right');
-          setSwipeDelta(deltaX);
+      const absX = Math.abs(deltaX);
+      const absY = Math.abs(deltaY);
+
+      if (dir === 'Up') {
+        if (deltaY < -VERTICAL_SWIPE_THRESHOLD_PX) {
+          swipeUpReadyRef.current = true;
         }
-      } else if (dir === 'Up' && deltaY < -50) {
         setSwipeDirection('up');
         setSwipeDelta(deltaY);
+        return;
+      }
+
+      if (absY > VERTICAL_SCROLL_SUPPRESSION_DELTA && absY > absX) {
+        if (!isVerticalScrollGuarded) {
+          setIsVerticalScrollGuarded(true);
+        }
+        setSwipeDirection(null);
+        setSwipeDelta(0);
+        return;
+      }
+
+      if (absX > absY && (dir === 'Left' || dir === 'Right')) {
+        setSwipeDirection(dir.toLowerCase() as 'left' | 'right');
+        setSwipeDelta(deltaX);
       }
     },
     onSwipedLeft: () => {
@@ -697,19 +764,23 @@ const Practice = () => {
     onSwipedUp: () => {
       setSwipeDirection(null);
       setSwipeDelta(0);
-      handleSwipeUp();
+      if (swipeUpReadyRef.current) {
+        swipeUpReadyRef.current = false;
+        handleSwipeUp();
+      }
     },
     onSwiped: () => {
-      // Reset after any swipe completes
+      swipeUpReadyRef.current = false;
       setTimeout(() => {
         setSwipeDirection(null);
         setSwipeDelta(0);
       }, 200);
+      setIsVerticalScrollGuarded(false);
     },
     trackMouse: true, // Enable mouse drag for desktop
     trackTouch: true, // Enable touch for mobile
-    preventScrollOnSwipe: true,
-    delta: 50, // Minimum distance for swipe
+    preventScrollOnSwipe: false,
+    delta: SWIPE_THRESHOLD_PX,
   });
 
   // Update timer display every second
@@ -1162,7 +1233,10 @@ const Practice = () => {
   return (
     <div className="min-h-screen bg-background">
       <Navigation />
-      <div className="container mx-auto px-4 py-4 max-w-4xl">
+      <div
+        className="container mx-auto px-4 py-4 max-w-4xl"
+        style={{ paddingBottom: "calc(140px + env(safe-area-inset-bottom))" }}
+      >
         {/* Compact Header */}
         <div className="flex flex-col gap-3 mb-4">
           <div className="flex items-center justify-between">
@@ -1232,24 +1306,6 @@ const Practice = () => {
             </div>
           )}
 
-          {/* Swipe Hint (only show on first question or when no swipe has happened) */}
-          {sessionState === 'inProgress' && !swipeDirection && swipeDelta === 0 && (
-            <div className="absolute -top-8 left-0 right-0 flex items-center justify-center gap-4 text-xs text-muted-foreground pointer-events-none">
-              <div className="flex items-center gap-1">
-                <ArrowLeft className="h-3 w-3" />
-                <span>Skip</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <Star className="h-3 w-3" />
-                <span>Favorite</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <ArrowUp className="h-3 w-3" />
-                <span>Guidance</span>
-              </div>
-            </div>
-          )}
-
           <Card 
             className={`overflow-hidden transition-transform duration-200 ${
               swipeDirection === 'left' ? 'transform -translate-x-2' :
@@ -1260,6 +1316,29 @@ const Practice = () => {
             {...swipeHandlers}
           >
             <CardHeader className="pb-4">
+              {sessionState === 'inProgress' && shouldShowSwipeHint && (
+                <div className="mb-4 flex flex-wrap items-center justify-center gap-3 rounded-full bg-muted px-4 py-2 text-[11px] text-muted-foreground">
+                  <span className="flex items-center gap-1 text-foreground">
+                    <ArrowLeft className="h-3 w-3" />
+                    Swipe to skip
+                  </span>
+                  <span className="flex items-center gap-1 text-foreground">
+                    <Star className="h-3 w-3" />
+                    Swipe to favorite
+                  </span>
+                  <span className="flex items-center gap-1 text-foreground">
+                    <ArrowUp className="h-3 w-3" />
+                    Swipe up for guidance
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleDismissSwipeHint}
+                    className="font-medium text-primary underline-offset-2 hover:underline"
+                  >
+                    Got it
+                  </button>
+                </div>
+              )}
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20 text-xs">
@@ -1500,7 +1579,10 @@ const Practice = () => {
         </div>
 
         {/* Navigation - Fixed at bottom on mobile */}
-        <div className="flex items-center justify-between max-w-2xl mx-auto mt-6 sticky bottom-4 bg-background/95 backdrop-blur-sm rounded-full border p-2 shadow-lg">
+        <div
+          className="flex w-full items-center justify-between max-w-2xl mx-auto mt-6 md:sticky md:bottom-4 bg-background rounded-3xl md:rounded-full border p-3 md:p-2 shadow-none md:shadow-lg md:bg-background/95 md:backdrop-blur-sm"
+          style={{ paddingBottom: "calc(0.5rem + env(safe-area-inset-bottom))" }}
+        >
           <Button
             variant="outline"
             onClick={previousQuestion}
@@ -1511,19 +1593,22 @@ const Practice = () => {
           </Button>
           
           {/* Question Indicators - Scrollable */}
-          <div className="flex items-center gap-1 px-2 overflow-x-auto max-w-xs scrollbar-hide">
+          <div className="flex items-center gap-2 px-2 overflow-x-auto max-w-[260px] scrollbar-hide">
             {questions.map((question, index) => (
               <button
                 key={question.id}
                 onClick={() => jumpToQuestion(index)}
-                className={`w-2 h-2 rounded-full transition-all duration-200 flex-shrink-0 ${
+                type="button"
+                aria-current={index === currentIndex ? "true" : undefined}
+                title={`Go to question ${index + 1}`}
+                aria-label={`Go to question ${index + 1}${question.answered ? ' (answered)' : ''}`}
+                className={`w-3 h-3 rounded-full transition-all duration-200 flex-shrink-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${
                   index === currentIndex 
                     ? 'bg-primary scale-150' 
                     : question.answered 
                       ? 'bg-green-500 hover:scale-125' 
                       : 'bg-muted hover:bg-muted-foreground/50 hover:scale-125'
                 }`}
-                aria-label={`Go to question ${index + 1}${question.answered ? ' (answered)' : ''}`}
               />
             ))}
           </div>
