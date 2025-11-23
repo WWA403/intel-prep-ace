@@ -43,6 +43,8 @@ Themes were clustered, conflicting recommendations were resolved using standard 
   _Action:_ Collapse secondary details behind accordions and keep primary metrics (stage name, status, recommended action) visible.
 
 ### 4. Practice Experience
+
+> **Status update (Nov 23, 2025):** Swipe guards, safe-area padding, 12 px nav dots, and clarified swipe hints shipped in commit `Improve practice usability gestures`. Remaining focus: stepper setup, voice-recording messaging, and rationale toggles.
 - **Swipe gestures conflict with scrolling & hints clash with content:** Users trigger actions accidentally and hints overlap.  
   _Action:_ Increase swipe threshold, ignore swipes when vertical scroll > certain delta, and move hints into a dismissible banner shown on the first card only.
 - **Bottom navigation overlays question cards on mobile:** Sticky bar hides input fields.  

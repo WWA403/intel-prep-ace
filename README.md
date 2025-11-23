@@ -101,6 +101,7 @@ All documentation now lives in a single navigation surface so you don't need to 
 
 ### 🎯 Status Snapshot
 - ✅ Research pipeline + synthesis rewrite deployed (see `docs/RESEARCH_PIPELINE_IMPROVEMENTS.md`).
+- ✅ Practice usability refinements (swipe guard, safe-area padding, nav dots) shipped per `Improve practice usability gestures` commit.
 - ⚠️ UI/UX regressions tracked in `docs/UI_UX_ENHANCEMENT_PLAN.md` block critical onboarding and practice flows.
 - ⚙️ Supabase + Edge Functions ready; need final migration + redeploy before reopening sign-ups.
 - 🚧 Audio transcription and analytics remain outside MVP scope but stay on deck.
@@ -109,7 +110,7 @@ All documentation now lives in a single navigation surface so you don't need to 
 | Priority | Initiative | High-Level Goal | Owner | Reference |
 | --- | --- | --- | --- | --- |
 | **P0** | Rendering & Access Hardening | Fix global glyph bug, gate Hireo landing for logged-out users, always show lightweight nav, surface redirect context. | Frontend | `docs/UI_UX_ENHANCEMENT_PLAN.md#1-access-onboarding--communication` |
-| **P0** | Practice Usability | Increase swipe thresholds, add bottom padding below sticky nav, enlarge nav dots ≥12 px, fix hint overlap. | Frontend | `docs/UI_UX_ENHANCEMENT_PLAN.md#4-practice-experience` |
+| **P0** | Practice Usability (✅ shipped Nov 23) | Increase swipe thresholds, add bottom padding below sticky nav, enlarge nav dots ≥12 px, fix hint overlap. | Frontend | `docs/UI_UX_ENHANCEMENT_PLAN.md#4-practice-experience` |
 | **P1** | Forms & Uploads Slimdown | Split research form into required/advanced accordions, add inline validation + counters, disable CV upload until storage ships. | Frontend | `docs/UI_UX_ENHANCEMENT_PLAN.md#2-copy-typography--form-inputs` |
 | **P1** | History & IA Refresh | Rename search selector to “Active Research,” add helper text + empty states, ship cross-page history sheet. | Frontend | `docs/UI_UX_ENHANCEMENT_PLAN.md#3-navigation--information-architecture` |
 | **P1** | Accessibility & Safe Areas | Define z-index scale (nav 40/dialog 80/toast 100), add aria-labels + stronger focus rings, enforce 44 px touch targets + safe-area padding. | Frontend | `docs/UI_UX_ENHANCEMENT_PLAN.md#5-accessibility--responsiveness` |
@@ -129,7 +130,7 @@ All documentation now lives in a single navigation surface so you don't need to 
 - Always render nav (Logo + Docs + Support + Sign in) regardless of auth state.
 - Gate Hireo form with inline auth prompt + sample data card.
 - Disable CV upload (“Coming Soon”) with privacy copy describing roadmap.
-- Increase practice nav dots to 12 px and add `pb-24` (plus safe-area inset) under sticky nav.
+- ✅ Increase practice nav dots to 12 px and add `pb-24` (plus safe-area inset) under sticky nav.
 - Add redirect-aware banner on `/auth` (“Sign in to resume Practice”).
 
 ### 📚 Historical Context
