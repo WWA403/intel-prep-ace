@@ -180,6 +180,49 @@ const Practice = () => {
     { value: 'Hard', label: 'Hard' }
   ];
 
+const getInterviewerFocus = (
+  question: Question | null,
+  meta?: { company?: string; role?: string }
+) => {
+  if (!question) return null;
+
+  const summaryPieces = [question.rationale, question.company_context].filter(
+    (piece): piece is string => Boolean(piece && piece.trim())
+  );
+
+  const evaluationCriteria = question.evaluation_criteria?.filter(
+    (criterion): criterion is string => Boolean(criterion && criterion.trim())
+  ) ?? [];
+
+  const followUps = question.follow_up_questions?.filter(
+    (followUp): followUp is string => Boolean(followUp && followUp.trim())
+  ) ?? [];
+
+  const answerApproach = question.suggested_answer_approach?.trim() || null;
+
+  const hasData =
+    summaryPieces.length > 0 ||
+    evaluationCriteria.length > 0 ||
+    followUps.length > 0 ||
+    Boolean(answerApproach);
+
+  if (!hasData) {
+    return null;
+  }
+
+  return {
+    summary: summaryPieces.join(' ').trim() || null,
+    criteria: evaluationCriteria,
+    followUps,
+    answerApproach,
+    meta: {
+      company: meta?.company,
+      role: meta?.role,
+      difficulty: question.difficulty
+    }
+  };
+};
+
   // Load search data and set up stages
   useEffect(() => {
     const loadSearchData = async () => {
@@ -685,6 +728,10 @@ const Practice = () => {
   const answeredCount = questions.filter(q => q.answered).length;
   const selectedStagesCount = allStages.filter(stage => stage.selected).length;
   const currentQuestionTime = getCurrentQuestionTime();
+const interviewerFocus = getInterviewerFocus(currentQuestion ?? null, {
+  company: searchData?.company,
+  role: searchData?.role
+});
 
   // Swipe handlers
   const handleSwipeLeft = () => {
@@ -1393,61 +1440,99 @@ const Practice = () => {
                 </Button>
               </div>
               
-              {/* Enhanced Question Information - Always show basic, toggle detailed with swipe up */}
-              {(currentQuestion.rationale || currentQuestion.company_context || currentQuestion.suggested_answer_approach || currentQuestion.evaluation_criteria || currentQuestion.follow_up_questions) && (
-                <div className="space-y-3 text-sm">
-                  {currentQuestion.rationale && (
-                    <div className="bg-blue-50 p-3 rounded-lg border-l-4 border-blue-200">
-                      <h4 className="font-medium text-blue-900 mb-1">Why this question?</h4>
-                      <p className="text-blue-800">{currentQuestion.rationale}</p>
+              {/* Consolidated interviewer focus box */}
+              {interviewerFocus && (
+                <div className="space-y-3 rounded-2xl border border-primary/15 bg-primary/5 p-4 text-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-primary">
+                        What the interviewer wants to see
+                      </p>
+                      {(() => {
+                        const metaParts = [
+                          interviewerFocus.meta.role,
+                          interviewerFocus.meta.company,
+                          interviewerFocus.meta.difficulty
+                            ? `${interviewerFocus.meta.difficulty} depth expected`
+                            : null
+                        ].filter(Boolean);
+
+                        if (metaParts.length === 0) return null;
+
+                        return (
+                          <p className="text-xs text-muted-foreground">
+                            {metaParts.join(" • ")}
+                          </p>
+                        );
+                      })()}
+                    </div>
+                    <Brain className="h-5 w-5 text-primary" />
+                  </div>
+
+                  {interviewerFocus.summary && (
+                    <p className="leading-relaxed text-foreground">
+                      {interviewerFocus.summary}
+                    </p>
+                  )}
+
+                  {interviewerFocus.criteria.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">
+                        Signals to hit
+                      </p>
+                      <ul className="space-y-1 text-foreground">
+                        {interviewerFocus.criteria.map((criterion, index) => (
+                          <li key={`${criterion}-${index}`} className="flex items-start gap-2">
+                            <span className="text-primary mt-1">•</span>
+                            <span>{criterion}</span>
+                          </li>
+                        ))}
+                      </ul>
                     </div>
                   )}
-                  
-                  {currentQuestion.company_context && (
-                    <div className="bg-purple-50 p-3 rounded-lg border-l-4 border-purple-200">
-                      <h4 className="font-medium text-purple-900 mb-1">Company Context</h4>
-                      <p className="text-purple-800">{currentQuestion.company_context}</p>
+
+                  {(interviewerFocus.answerApproach || interviewerFocus.followUps.length > 0) && (
+                    <div className="rounded-lg border border-dashed border-primary/30 bg-background/60 p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                        <span>Swipe up or tap to view deeper guidance</span>
+                        <button
+                          type="button"
+                          onClick={() => setShowGuidance(prev => !prev)}
+                          className="font-medium text-primary underline-offset-2 hover:underline"
+                        >
+                          {showGuidance ? 'Hide details' : 'Show details'}
+                        </button>
+                      </div>
+
+                      {showGuidance && (
+                        <div className="space-y-3 pt-3 text-sm">
+                          {interviewerFocus.answerApproach && (
+                            <div>
+                              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">
+                                Answer approach
+                              </p>
+                              <p>{interviewerFocus.answerApproach}</p>
+                            </div>
+                          )}
+
+                          {interviewerFocus.followUps.length > 0 && (
+                            <div>
+                              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">
+                                Possible follow-ups
+                              </p>
+                              <ul className="space-y-1">
+                                {interviewerFocus.followUps.map((followUp, index) => (
+                                  <li key={`${followUp}-${index}`} className="flex items-start gap-2">
+                                    <span className="text-muted-foreground mt-1">•</span>
+                                    <span>{followUp}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
-                  )}
-                  
-                  {/* Detailed guidance - toggle with swipe up */}
-                  {showGuidance && (
-                    <>
-                      {currentQuestion.suggested_answer_approach && (
-                        <div className="bg-green-50 p-3 rounded-lg border-l-4 border-green-200">
-                          <h4 className="font-medium text-green-900 mb-1">Answer Approach</h4>
-                          <p className="text-green-800">{currentQuestion.suggested_answer_approach}</p>
-                        </div>
-                      )}
-                      
-                      {currentQuestion.evaluation_criteria && currentQuestion.evaluation_criteria.length > 0 && (
-                        <div className="bg-amber-50 p-3 rounded-lg border-l-4 border-amber-200">
-                          <h4 className="font-medium text-amber-900 mb-1">What interviewers look for:</h4>
-                          <ul className="text-amber-800 space-y-1">
-                            {currentQuestion.evaluation_criteria.map((criterion, index) => (
-                              <li key={index} className="flex items-start gap-2">
-                                <span className="text-amber-600 mt-1">•</span>
-                                {criterion}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                      
-                      {currentQuestion.follow_up_questions && currentQuestion.follow_up_questions.length > 0 && (
-                        <div className="bg-gray-50 p-3 rounded-lg border-l-4 border-gray-200">
-                          <h4 className="font-medium text-gray-900 mb-1">Potential follow-up questions:</h4>
-                          <ul className="text-gray-800 space-y-1">
-                            {currentQuestion.follow_up_questions.map((followUp, index) => (
-                              <li key={index} className="flex items-start gap-2">
-                                <span className="text-gray-600 mt-1">•</span>
-                                {followUp}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                    </>
                   )}
                 </div>
               )}
