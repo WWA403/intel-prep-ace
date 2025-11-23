@@ -29,7 +29,6 @@ import {
   Filter,
   Shuffle,
   Star,
-  ArrowUp,
   ArrowLeft,
   ArrowRight
 } from "lucide-react";
@@ -40,7 +39,6 @@ import { SessionSummary } from "@/components/SessionSummary";
 
 const SWIPE_THRESHOLD_PX = 80;
 const VERTICAL_SCROLL_SUPPRESSION_DELTA = 18;
-const VERTICAL_SWIPE_THRESHOLD_PX = 80;
 const PRACTICE_SETUP_STORAGE_KEY = "practiceSetupDefaults";
 
 const SETUP_STEPS = [
@@ -191,7 +189,6 @@ const Practice = () => {
   const hasDismissedSwipeHintRef = useRef(false);
   const [shouldShowSwipeHint, setShouldShowSwipeHint] = useState(true);
   const [isVerticalScrollGuarded, setIsVerticalScrollGuarded] = useState(false);
-  const swipeUpReadyRef = useRef(false);
   
   // Voice recording states
   const [isRecording, setIsRecording] = useState(false);
@@ -202,9 +199,8 @@ const Practice = () => {
   const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   
   // Swipe gesture states
-  const [swipeDirection, setSwipeDirection] = useState<'left' | 'right' | 'up' | null>(null);
+  const [swipeDirection, setSwipeDirection] = useState<'left' | 'right' | null>(null);
   const [swipeDelta, setSwipeDelta] = useState(0);
-  const [detailsExpanded, setDetailsExpanded] = useState(false);
 
   const loadPracticeDefaults = () => {
     if (typeof window === "undefined") return false;
@@ -904,16 +900,10 @@ const getInterviewerFocus = (
     }
   };
 
-  const handleSwipeUp = () => {
-    hideSwipeHint();
-    setDetailsExpanded(prev => !prev);
-  };
-
   // Reset swipe state when question changes
   useEffect(() => {
     setSwipeDirection(null);
     setSwipeDelta(0);
-    setDetailsExpanded(false);
   }, [currentIndex]);
 
   // Swipe configuration
@@ -922,15 +912,6 @@ const getInterviewerFocus = (
       const { dir, deltaX, deltaY } = eventData;
       const absX = Math.abs(deltaX);
       const absY = Math.abs(deltaY);
-
-      if (dir === 'Up') {
-        if (deltaY < -VERTICAL_SWIPE_THRESHOLD_PX) {
-          swipeUpReadyRef.current = true;
-        }
-        setSwipeDirection('up');
-        setSwipeDelta(deltaY);
-        return;
-      }
 
       if (absY > VERTICAL_SCROLL_SUPPRESSION_DELTA && absY > absX) {
         if (!isVerticalScrollGuarded) {
@@ -956,16 +937,7 @@ const getInterviewerFocus = (
       setSwipeDelta(0);
       handleSwipeRight();
     },
-    onSwipedUp: () => {
-      setSwipeDirection(null);
-      setSwipeDelta(0);
-      if (swipeUpReadyRef.current) {
-        swipeUpReadyRef.current = false;
-        handleSwipeUp();
-      }
-    },
     onSwiped: () => {
-      swipeUpReadyRef.current = false;
       setTimeout(() => {
         setSwipeDirection(null);
         setSwipeDelta(0);
@@ -1505,15 +1477,13 @@ const getInterviewerFocus = (
           {swipeDirection && (
             <div 
               className={`absolute inset-0 z-10 flex items-center justify-center pointer-events-none transition-opacity duration-200 ${
-                swipeDirection === 'left' ? 'bg-red-500/20' :
-                swipeDirection === 'right' ? 'bg-amber-500/20' :
-                'bg-blue-500/20'
+                swipeDirection === 'left' ? 'bg-red-500/20' : 'bg-amber-500/20'
               }`}
               style={{
                 opacity: Math.min(Math.abs(swipeDelta) / 100, 0.8),
-                transform: swipeDirection === 'left' ? `translateX(${Math.min(swipeDelta, 0)}px)` :
-                           swipeDirection === 'right' ? `translateX(${Math.max(swipeDelta, 0)}px)` :
-                           `translateY(${Math.min(swipeDelta, 0)}px)`
+                transform: swipeDirection === 'left'
+                  ? `translateX(${Math.min(swipeDelta, 0)}px)`
+                  : `translateX(${Math.max(swipeDelta, 0)}px)`
               }}
             >
               <div className="flex flex-col items-center gap-2 text-lg font-semibold">
@@ -1529,12 +1499,6 @@ const getInterviewerFocus = (
                     <span className="text-amber-600">Favorite</span>
                   </>
                 )}
-                {swipeDirection === 'up' && (
-                  <>
-                    <ArrowUp className="h-8 w-8 text-blue-600" />
-                    <span className="text-blue-600">Details</span>
-                  </>
-                )}
               </div>
             </div>
           )}
@@ -1543,7 +1507,6 @@ const getInterviewerFocus = (
             className={`overflow-hidden transition-transform duration-200 ${
               swipeDirection === 'left' ? 'transform -translate-x-2' :
               swipeDirection === 'right' ? 'transform translate-x-2' :
-              swipeDirection === 'up' ? 'transform -translate-y-2' :
               ''
             }`}
             {...swipeHandlers}
@@ -1558,10 +1521,6 @@ const getInterviewerFocus = (
                   <span className="flex items-center gap-1 text-foreground">
                     <Star className="h-3 w-3" />
                     Swipe to favorite
-                  </span>
-                  <span className="flex items-center gap-1 text-foreground">
-                    <ArrowUp className="h-3 w-3" />
-                    Swipe up for details
                   </span>
                   <button
                     type="button"
@@ -1626,108 +1585,49 @@ const getInterviewerFocus = (
                 </Button>
               </div>
               
-              {/* Consolidated interviewer focus box */}
+              {/* Interviewer context */}
               {interviewerFocus && (
-                <div className="space-y-3 rounded-2xl border border-primary/15 bg-primary/5 p-4 text-sm">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-primary">
-                        What the interviewer wants to see
+                <div className="space-y-2 rounded-xl bg-muted/40 p-3 text-sm">
+                  {(() => {
+                    const metaParts = [
+                      interviewerFocus.meta.role,
+                      interviewerFocus.meta.company,
+                      interviewerFocus.meta.difficulty ? `${interviewerFocus.meta.difficulty} depth expected` : null
+                    ].filter(Boolean);
+                    if (metaParts.length === 0) return null;
+                    return (
+                      <p className="text-xs text-muted-foreground">
+                        {metaParts.join(" • ")}
                       </p>
-                      {(() => {
-                        const metaParts = [
-                          interviewerFocus.meta.role,
-                          interviewerFocus.meta.company,
-                          interviewerFocus.meta.difficulty
-                            ? `${interviewerFocus.meta.difficulty} depth expected`
-                            : null
-                        ].filter(Boolean);
+                    );
+                  })()}
 
-                        if (metaParts.length === 0) return null;
-
-                        return (
-                          <p className="text-xs text-muted-foreground">
-                            {metaParts.join(" • ")}
-                          </p>
-                        );
-                      })()}
-                    </div>
-                    <Brain className="h-5 w-5 text-primary" />
-                  </div>
-
-                  {!detailsExpanded && (
-                    <p className="text-xs text-muted-foreground">
-                      Detailed rationale is hidden. Tap “Show details” or swipe up to review interviewer context and follow-up prompts.
+                  {interviewerFocus.summary && (
+                    <p className="leading-relaxed text-foreground">
+                      {interviewerFocus.summary}
                     </p>
                   )}
 
-                  {detailsExpanded && (
-                    <>
-                      {interviewerFocus.summary && (
-                        <p className="leading-relaxed text-foreground">
-                          {interviewerFocus.summary}
-                        </p>
-                      )}
-
-                      {interviewerFocus.criteria.length > 0 && (
-                        <div>
-                          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">
-                            Signals to hit
-                          </p>
-                          <ul className="space-y-1 text-foreground">
-                            {interviewerFocus.criteria.map((criterion, index) => (
-                              <li key={`${criterion}-${index}`} className="flex items-start gap-2">
-                                <span className="text-primary mt-1">•</span>
-                                <span>{criterion}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-
-                      {(interviewerFocus.answerApproach || interviewerFocus.followUps.length > 0) && (
-                        <div className="rounded-lg border border-dashed border-primary/30 bg-background/60 p-3">
-                          <div className="space-y-3 text-sm">
-                            {interviewerFocus.answerApproach && (
-                              <div>
-                                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">
-                                  Answer approach
-                                </p>
-                                <p>{interviewerFocus.answerApproach}</p>
-                              </div>
-                            )}
-
-                            {interviewerFocus.followUps.length > 0 && (
-                              <div>
-                                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">
-                                  Possible follow-ups
-                                </p>
-                                <ul className="space-y-1">
-                                  {interviewerFocus.followUps.map((followUp, index) => (
-                                    <li key={`${followUp}-${index}`} className="flex items-start gap-2">
-                                      <span className="text-muted-foreground mt-1">•</span>
-                                      <span>{followUp}</span>
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </>
+                  {interviewerFocus.criteria.length > 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      <span className="font-semibold text-foreground">Signals:</span>{" "}
+                      {interviewerFocus.criteria.join(" · ")}
+                    </p>
                   )}
 
-                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-                    <span>Swipe up or tap to {detailsExpanded ? 'hide' : 'view'} question details</span>
-                    <button
-                      type="button"
-                      onClick={() => setDetailsExpanded(prev => !prev)}
-                      className="font-medium text-primary underline-offset-2 hover:underline"
-                    >
-                      {detailsExpanded ? 'Hide details' : 'Show details'}
-                    </button>
-                  </div>
+                  {interviewerFocus.answerApproach && (
+                    <p className="text-xs text-muted-foreground">
+                      <span className="font-semibold text-foreground">Approach:</span>{" "}
+                      {interviewerFocus.answerApproach}
+                    </p>
+                  )}
+
+                  {interviewerFocus.followUps.length > 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      <span className="font-semibold text-foreground">Possible follow-ups:</span>{" "}
+                      {interviewerFocus.followUps.join(" · ")}
+                    </p>
+                  )}
                 </div>
               )}
             </CardHeader>
