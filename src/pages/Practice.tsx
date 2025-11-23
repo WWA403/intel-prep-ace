@@ -690,7 +690,6 @@ const getInterviewerFocus = (
     hasDismissedSwipeHintRef.current = false;
     setShouldShowSwipeHint(true);
     setIsVerticalScrollGuarded(false);
-    swipeUpReadyRef.current = false;
     setSetupStep(0);
     setSelectedPreset(null);
     
@@ -725,7 +724,6 @@ const getInterviewerFocus = (
     hasDismissedSwipeHintRef.current = false;
     setShouldShowSwipeHint(false);
     setIsVerticalScrollGuarded(false);
-    swipeUpReadyRef.current = false;
   };
   
   const toggleCategory = (category: string) => {
