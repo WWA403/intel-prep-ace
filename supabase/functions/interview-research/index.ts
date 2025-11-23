@@ -812,24 +812,32 @@ serve(async (req) => {
 
   try {
     const { company, role, country, roleLinks, cv, targetSeniority, userId, searchId } = await req.json() as SynthesisRequest;
-    
-    // Initialize progress tracker for real-time updates
-    const tracker = new ProgressTracker(searchId);
-    await tracker.updateStep('INITIALIZING');
-    
-    // Start background processing (fire-and-forget pattern)
-    processResearchAsync(company, role, country, roleLinks, cv, targetSeniority, userId, searchId, tracker)
-      .catch(async (error) => {
+
+    // Validate required fields
+    if (!company || !userId || !searchId) {
+      return new Response(
+        JSON.stringify({ error: 'Missing required fields: company, userId, searchId' }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    // Start background processing immediately (true fire-and-forget)
+    // Do NOT await anything before returning response
+    processResearchAsync(company, role, country, roleLinks, cv, targetSeniority, userId, searchId)
+      .catch((error) => {
         console.error('Background processing failed:', error);
-        await tracker.markFailed(error.message);
+        // Error handling happens inside processResearchAsync
       });
-    
-    // Return immediate response (202 Accepted)
+
+    // Return immediate response (202 Accepted) - no database operations before this!
     return new Response(
       JSON.stringify({
         searchId,
-        status: 'processing',
-        message: 'Research started successfully',
+        status: 'accepted',
+        message: 'Research request accepted and processing started',
         estimatedTime: '20-30 seconds'
       }),
       {
@@ -838,9 +846,9 @@ serve(async (req) => {
       }
     );
   } catch (error) {
-    console.error('Error starting research:', error);
+    console.error('Error parsing request:', error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: 'Invalid request format' }),
       {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -861,11 +869,15 @@ async function processResearchAsync(
   cv: string | undefined,
   targetSeniority: 'junior' | 'mid' | 'senior' | undefined,
   userId: string,
-  searchId: string,
-  tracker: ProgressTracker
+  searchId: string
 ) {
+  // Initialize progress tracker inside async function (not in main handler)
+  const tracker = new ProgressTracker(searchId);
+
   try {
-    // Initialize logger
+    // Initialize tracker and logger
+    await tracker.updateStep('INITIALIZING');
+
     const logger = new SearchLogger(searchId, 'interview-research', userId);
     logger.log('REQUEST_INPUT', 'VALIDATION', { company, role, country, roleLinks: roleLinks?.length, hasCv: !!cv, userId });
 
