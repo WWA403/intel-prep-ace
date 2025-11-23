@@ -140,7 +140,6 @@ This keeps `supabase/schema.sql` as a single source of truth for understanding t
 
 **Quick references:**
 - **Current schema:** `supabase/schema.sql` - Updated after every database change
-- **Schema analysis:** `docs/DATABASE_ANALYSIS.md` - MVP assessment, issues, and recommendations
 - **Evolution history:** `supabase/migrations/` - How the schema got to current state
 
 The snapshot in `schema.sql` provides a single source of truth for understanding the current database state, complementing the migration history which shows how the schema evolved.
