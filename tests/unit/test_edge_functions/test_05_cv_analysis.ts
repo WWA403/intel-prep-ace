@@ -146,33 +146,35 @@ Deno.test({
       // Step 2: Parse and verify response structure
       const result = await response.json();
       console.log("  📦 Response structure:", {
-        has_cv_analysis: !!result.cv_analysis,
-        analysis_keys: result.cv_analysis ? Object.keys(result.cv_analysis) : []
+        success: result.success,
+        has_parsed_data: !!result.parsedData,
+        has_ai_analysis: !!result.aiAnalysis
       });
 
-      assertExists(result.cv_analysis, "Should return cv_analysis");
-      assertExists(result.cv_analysis.skills, "Should have skills");
+      assertEquals(result.success, true, "Should return success: true");
+      assertExists(result.aiAnalysis, "Should return aiAnalysis");
+      assertExists(result.parsedData, "Should return parsedData");
 
       console.log("  ✅ CV analysis structure valid");
       console.log("  📊 CV Analysis Results:", JSON.stringify({
-        name: result.cv_analysis.name || "N/A",
-        current_role: result.cv_analysis.current_role || "N/A",
-        experience_years: result.cv_analysis.experience_years || "N/A",
-        technical_skills_count: result.cv_analysis.skills?.technical?.length || 0,
-        soft_skills_count: result.cv_analysis.skills?.soft?.length || 0,
-        experience_count: result.cv_analysis.experience?.length || 0,
-        education_degree: result.cv_analysis.education?.degree || "N/A"
+        name: result.aiAnalysis.name || "N/A",
+        current_role: result.aiAnalysis.current_role || "N/A",
+        experience_years: result.aiAnalysis.experience_years || "N/A",
+        technical_skills_count: result.aiAnalysis.skills?.technical?.length || 0,
+        soft_skills_count: result.aiAnalysis.skills?.soft?.length || 0,
+        experience_count: result.aiAnalysis.experience?.length || 0,
+        education_degree: result.aiAnalysis.education?.degree || "N/A"
       }, null, 2));
 
       // Step 3: Verify extracted data quality
-      if (result.cv_analysis.skills?.technical) {
-        console.log("  📊 Sample Technical Skills:", result.cv_analysis.skills.technical.slice(0, 5));
+      if (result.aiAnalysis.skills?.technical) {
+        console.log("  📊 Sample Technical Skills:", result.aiAnalysis.skills.technical.slice(0, 5));
       }
-      if (result.cv_analysis.experience && result.cv_analysis.experience.length > 0) {
+      if (result.aiAnalysis.experience && result.aiAnalysis.experience.length > 0) {
         console.log("  📊 Sample Experience:", JSON.stringify({
-          company: result.cv_analysis.experience[0].company,
-          role: result.cv_analysis.experience[0].role,
-          duration: result.cv_analysis.experience[0].duration
+          company: result.aiAnalysis.experience[0].company,
+          role: result.aiAnalysis.experience[0].role,
+          duration: result.aiAnalysis.experience[0].duration
         }, null, 2));
       }
 
@@ -259,9 +261,9 @@ Education: BS Computer Science, 2023
       if (response.ok) {
         const result = await response.json();
         console.log("  📊 Minimal CV Analysis:", JSON.stringify({
-          name: result.cv_analysis?.name || "N/A",
-          skills_extracted: result.cv_analysis?.skills?.technical?.length || 0,
-          has_education: !!result.cv_analysis?.education
+          name: result.aiAnalysis?.name || "N/A",
+          skills_extracted: result.aiAnalysis?.skills?.technical?.length || 0,
+          has_education: !!result.aiAnalysis?.education
         }, null, 2));
 
         console.log("  ✅ Minimal CV handled successfully");
@@ -303,17 +305,17 @@ Deno.test({
         const result = await response.json();
 
         // Verify skills extraction
-        console.log("  📊 Technical Skills:", result.cv_analysis?.skills?.technical || []);
-        console.log("  📊 Soft Skills:", result.cv_analysis?.skills?.soft || []);
+        console.log("  📊 Technical Skills:", result.aiAnalysis?.skills?.technical || []);
+        console.log("  📊 Soft Skills:", result.aiAnalysis?.skills?.soft || []);
 
         // Verify experience extraction
         console.log("  📊 Work Experience:");
-        result.cv_analysis?.experience?.forEach((exp: any, idx: number) => {
+        result.aiAnalysis?.experience?.forEach((exp: any, idx: number) => {
           console.log(`    ${idx + 1}. ${exp.role} at ${exp.company} (${exp.duration})`);
         });
 
         // Check if key skills are detected
-        const technicalSkills = result.cv_analysis?.skills?.technical || [];
+        const technicalSkills = result.aiAnalysis?.skills?.technical || [];
         const hasReact = technicalSkills.some((skill: string) =>
           skill.toLowerCase().includes('react')
         );
