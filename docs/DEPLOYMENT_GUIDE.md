@@ -401,7 +401,7 @@ If deployment issues occur:
 
 1. Check logs in Supabase Dashboard
 2. Review troubleshooting section above
-3. Check OPTION_B_REDESIGN_COMPLETE.md for details
+3. Review the architecture notes in `README.md` or `docs/RESEARCH_PIPELINE_IMPROVEMENTS.md` for deeper context
 4. Consider rollback if critical
 
 ---

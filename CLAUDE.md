@@ -225,7 +225,7 @@ The question generation system has been significantly enhanced to provide compre
 4. **CV Analysis**: Resume parsing with intelligent skill extraction
 5. **Interview Question Generator**: Research-driven comprehensive question generation (120-150 questions per search)
 
-**Note**: CV-Job comparison functionality has been consolidated into the unified synthesis within `interview-research` (Option B redesign - see `docs/OPTION_B_REDESIGN_COMPLETE.md`).
+**Note**: CV-Job comparison functionality has been consolidated into the unified synthesis within `interview-research` as part of the November 2025 redesign.
 
 ## Design System
 
@@ -437,7 +437,7 @@ The system underwent a major architectural redesign to improve reliability and p
 - **Better Reliability**: Failure points reduced from 6+ to 2-3
 
 **For detailed information**, see:
-- `docs/OPTION_B_REDESIGN_COMPLETE.md` - Complete technical documentation
+- `docs/RESEARCH_PIPELINE_IMPROVEMENTS.md` - Pipeline optimization backlog and deep dives
 - `docs/DEPLOYMENT_GUIDE.md` - Deployment procedures
 - `README.md` (Documentation Hub) - Single navigation surface
 
@@ -464,7 +464,7 @@ The system underwent a major architectural redesign to improve reliability and p
 
 ### Getting Help
 - **Documentation**: See the Documentation Hub in `README.md` for navigation to all guides
-- **Architecture**: See `docs/OPTION_B_REDESIGN_COMPLETE.md` for system design
+- **Architecture**: Review the “Recent Architecture Changes” section above or `docs/RESEARCH_PIPELINE_IMPROVEMENTS.md` for system design details
 - **Deployment**: See `docs/DEPLOYMENT_GUIDE.md` for deployment procedures
 - **Logs**: Check Supabase Dashboard → Functions → Logs for detailed error information
 

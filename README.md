@@ -48,45 +48,19 @@ All documentation now lives in a single navigation surface so you don't need to 
 | Document | Why you need it | Notes |
 |----------|-----------------|-------|
 | [`CLAUDE.md`](./CLAUDE.md) | End-to-end developer playbook | Start here for architecture, commands, and workflows. |
-| [`docs/OPTION_B_REDESIGN_COMPLETE.md`](./docs/OPTION_B_REDESIGN_COMPLETE.md) | Deep dive on the November 2025 redesign | Includes diagrams, decision records, and migration details. |
 | [`docs/DEPLOYMENT_GUIDE.md`](./docs/DEPLOYMENT_GUIDE.md) | Deploying to Supabase (DB + Edge Functions) | Step-by-step instructions with troubleshooting. |
 | [`docs/RESEARCH_PIPELINE_IMPROVEMENTS.md`](./docs/RESEARCH_PIPELINE_IMPROVEMENTS.md) | Pipeline optimization backlog | Use for planning perf work. |
 | [`docs/UI_UX_ENHANCEMENT_PLAN.md`](./docs/UI_UX_ENHANCEMENT_PLAN.md) | Design backlog and heuristics | Reference when shipping UI polish. |
 
 ### Role-Based Fast Track
-- **Developers:** Read `OPTION_B_REDESIGN_COMPLETE.md`, inspect `supabase/functions/interview-research/index.ts`, then follow `CLAUDE.md` commands.
+- **Developers:** Inspect `supabase/functions/interview-research/index.ts`, then follow `CLAUDE.md` commands.
 - **Operations/DevOps:** Follow `docs/DEPLOYMENT_GUIDE.md` in order: DB migration → Edge Functions → smoke tests → monitoring.
-- **Product & Stakeholders:** Skim the Option B summary below plus the UI/UX plan for roadmap context.
+- **Product & Stakeholders:** Skim the UI/UX plan for roadmap context.
 
 ### Key Files to Know
-- `supabase/functions/interview-research/index.ts` – unified synthesis function (Option B).
+- `supabase/functions/interview-research/index.ts` – unified synthesis function.
 - `supabase/migrations/20251116_redesign_option_b_search_artifacts.sql` – creates `search_artifacts` with indexes + RLS.
 - `src/services/searchService.ts` – frontend gateway that now reads from `search_artifacts`.
-
-## 🆕 Option B Redesign Snapshot (Nov 2025)
-
-The new pipeline (Option B) eliminates the old cv-job-comparison microservice in favor of a single, timeout-protected synthesis path that stores every artifact immediately.
-
-| Metric | Before | After | Delta |
-|--------|--------|-------|-------|
-| Database ops per search | 126–157 | 5–7 | 97% fewer |
-| Database write time | 30–180+ sec | < 3 sec | 97% faster |
-| Failure points | 6+ | 2–3 | 97% fewer |
-| Data retention | Partial | 100% | Full raw data saved |
-| Reliability | 85% | 99%+ | +16 pts |
-
-**Key architectural highlights**
-- Raw data lands in `search_artifacts` instantly, so retries can reuse prior work.
-- Unified OpenAI call produces stages, STAR stories, gap analysis, and ~140 questions at once.
-- Consistent timeout helpers around every DB call prevent zombie writes.
-- Frontend now consumes a single artifact payload, simplifying query logic.
-
-### Deployment Status
-- ✅ Code updates merged to `dev-q`.
-- ✅ Documentation refreshed (this README + Option B deep dive).
-- ⏳ Supabase migration deployment pending (`20251116_redesign_option_b_search_artifacts.sql`).
-- ⏳ Edge Function redeploy pending (`interview-research`).
-- ⏳ Full system QA + monitoring pass pending after rollout.
 
 ## 🚀 Quick Start
 
@@ -124,10 +98,10 @@ The new pipeline (Option B) eliminates the old cv-job-comparison microservice in
 ## 📋 MVP Status & Development Backlog
 
 > **Last Updated:** November 23, 2025  
-> **Current MVP Completion:** ~86% (Option B shipped; UI polish + research QA outstanding)
+> **Current MVP Completion:** ~86% (research pipeline rewrite shipped; UI polish + research QA outstanding)
 
 ### 🎯 Status Snapshot
-- ✅ Option B research pipeline + synthesis rewrite deployed (see `docs/RESEARCH_PIPELINE_IMPROVEMENTS.md`).
+- ✅ Research pipeline + synthesis rewrite deployed (see `docs/RESEARCH_PIPELINE_IMPROVEMENTS.md`).
 - ⚠️ UI/UX regressions tracked in `docs/UI_UX_ENHANCEMENT_PLAN.md` block critical onboarding and practice flows.
 - ⚙️ Supabase + Edge Functions ready; need final migration + redeploy before reopening sign-ups.
 - 🚧 Audio transcription and analytics remain outside MVP scope but stay on deck.
@@ -161,7 +135,6 @@ The new pipeline (Option B) eliminates the old cv-job-comparison microservice in
 
 ### 📚 Historical Context
 - Completed epics (seniority personalization, sampler, favorites, swipe gestures) now live inside the product; see `docs/IMPLEMENTATION_CHANGES.md` for deep dives.
-- Option B architectural notes remain in `docs/OPTION_B_REDESIGN_COMPLETE.md`.
 - Audio transcription, timer presets, analytics dashboards stay parked until the above priorities land.
 
 ## 🏗️ Architecture
@@ -169,8 +142,8 @@ The new pipeline (Option B) eliminates the old cv-job-comparison microservice in
 ### Tech Stack
 - **Frontend:** React 18, TypeScript, Tailwind CSS, shadcn/ui
 - **Backend:** Supabase (PostgreSQL, Auth, Edge Functions)
-- **AI:** OpenAI GPT-4.1 for intelligent research
-- **Deployment:** Lovable platform
+- **AI:** OpenAI GPT-5 series for intelligent research
+- **Deployment:** Originally Lovable platform, now TBC (possibly Vercel)
 
 ### Key Components
 
