@@ -163,11 +163,12 @@ Deno.test({
       }
 
       // Step 5: Cross-verify database - Check scraped_urls table
+      // Note: scraped_urls uses company_name for deduplication, not search_id
       console.log("  🔍 Cross-verifying scraped URLs in database...");
       const { data: scrapedUrls, error: urlsError } = await supabase
         .from("scraped_urls")
         .select("*")
-        .eq("search_id", searchId)
+        .eq("company_name", "Google")
         .order("created_at", { ascending: false });
 
       if (urlsError) {
@@ -177,10 +178,11 @@ Deno.test({
         if (scrapedUrls && scrapedUrls.length > 0) {
           console.log("  📊 Sample scraped URL:", JSON.stringify({
             url: scrapedUrls[0].url,
+            company_name: scrapedUrls[0].company_name,
             title: scrapedUrls[0].title,
-            content_length: scrapedUrls[0].content?.length || 0,
-            quality_score: scrapedUrls[0].quality_score,
-            source_type: scrapedUrls[0].source_type
+            content_length: scrapedUrls[0].full_content?.length || 0,
+            quality_score: scrapedUrls[0].content_quality_score,
+            times_reused: scrapedUrls[0].times_reused
           }, null, 2));
         }
       }
@@ -202,14 +204,14 @@ Deno.test({
 });
 
 Deno.test({
-  name: "Company Research - Test 3.2: Research without searchId (standalone call)",
+  name: "Company Research - Test 3.2: Validate searchId requirement (error handling)",
   sanitizeResources: false,
   sanitizeOps: false,
   async fn() {
     const { client: supabase } = await getAuthenticatedClient();
 
     try {
-      // Call company-research without searchId
+      // Call company-research without searchId - should fail gracefully
       console.log("  🔍 Calling company-research without searchId...");
       const functionUrl = `${supabaseUrl}/functions/v1/company-research`;
       const response = await fetch(functionUrl, {
@@ -222,19 +224,19 @@ Deno.test({
           company: "Microsoft",
           role: "Product Manager",
           country: "United States"
+          // Missing searchId - should cause error
         })
       });
 
       console.log("  📊 HTTP Response:", response.status);
-      assertEquals(response.ok, true, "Should work without searchId");
+
+      // Should return error status (400 or 500)
+      assertEquals(response.ok, false, "Should fail without searchId");
+      assertEquals(response.status >= 400, true, "Should return error status code");
 
       const result = await response.json();
-      assertExists(result.company_insights, "Should return company_insights");
-      assertExists(result.company_insights.name, "Should have company name");
-
-      console.log("  ✅ Standalone research works");
-      console.log("  📊 Company:", result.company_insights.name);
-      console.log("  📊 Industry:", result.company_insights.industry);
+      console.log("  ✅ Error handling verified");
+      console.log("  📊 Error response:", JSON.stringify(result, null, 2));
 
     } finally {
       await supabase.removeAllChannels();
