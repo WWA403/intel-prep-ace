@@ -50,9 +50,11 @@ A modern, AI-powered interview preparation tool that helps small circles of frie
 
 ### Getting Started
 
-1. **Visit the App**
+1. **Run the App Locally**
    ```
-   https://lovable.dev/projects/f6161025-31dc-4404-8dea-263c660d8616
+   npm install
+   npm run dev
+   # Then browse http://localhost:5173
    ```
 
 2. **Create Account**
