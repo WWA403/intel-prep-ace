@@ -2,20 +2,11 @@
 
 **Date:** November 23, 2025  
 **Prepared by:** AI Assistant  
-**Scope:** Consolidated response to all UI/UX feedback reports for the Hireo interview preparation tool.
+**Scope:** All UI/UX feedback to-date for the Hireo interview preparation tool.
 
 ---
 
 ## Inputs & Approach
-Feedback was synthesized from the following internal reports:
-
-- `docs/UI_UX_AUDIT_REPORT.md`
-- `docs/UI_UX_REVIEW.md`
-- `docs/UI_UX_REVIEW_2.md`
-- `docs/UI_UX_REVIEW_3.md`
-- `docs/UI_UX_REVIEW_4.md`
-- `docs/UI_UX_REVIEW_5.md`
-- `docs/UI_UX_REVIEW_REPORT.md`
 
 Themes were clustered, conflicting recommendations were resolved using standard product heuristics (Nielsen-Molich, WCAG 2.1 AA, and common SaaS onboarding patterns), and resulting actions were sized with the “small team, limited audience” constraint in mind.
 
@@ -24,7 +15,7 @@ Themes were clustered, conflicting recommendations were resolved using standard 
 ## Experience Themes & Recommended Actions
 
 ### 1. Access, Onboarding & Communication
-- **Hero unusable for guests:** “Start Research” remains disabled and there is no inline copy explaining that research requires authentication.  
+- **Hireo landing hero unusable for guests:** “Start Research” remains disabled and there is no inline copy explaining that research requires authentication.  
   _Action:_ Detect `!user` upfront, swap the form for a compact “Sign in to start research” panel with CTA and sample output preview.
 - **Navigation disappears for logged-out visitors:** Users lose the ability to reach docs/support once redirected to `/auth`.  
   _Action:_ Always render a lightweight navigation bar (logo + Docs + Support + Sign in) regardless of auth state.
@@ -35,7 +26,7 @@ Themes were clustered, conflicting recommendations were resolved using standard 
 
 ### 2. Copy, Typography & Form Inputs
 - **Global glyph bug:** The letter “s/S” fails to render, making every string look corrupted.  
-  _Action:_ Revert to the default font stack (Tailwind `font-sans`) until the custom font subset is fixed; regression-test hero/auth copy.
+  _Action:_ Revert to the default font stack (Tailwind `font-sans`) until the custom font subset is fixed; regression-test Hireo hero/auth copy.
 - **Form bloat and unclear optionality:** Long research form overwhelms users and hides validation.  
   _Action:_ Split into “Required info” and “Advanced options” accordions, add inline validation + character counters, and highlight optional fields.
 - **CV upload UX gaps:** Button implies functionality, but uploads neither persist nor show file names.  
@@ -92,7 +83,7 @@ Themes were clustered, conflicting recommendations were resolved using standard 
 
 | Priority | Theme | Key Fixes | Effort | Owner |
 | --- | --- | --- | --- | --- |
-| **P0** (Critical) | Rendering & Access | Fix missing glyph bug, gate hero form behind auth-aware CTA, always show navigation, add redirect context | 2-3 dev days | Frontend |
+| **P0** (Critical) | Rendering & Access | Fix missing glyph bug, gate Hireo hero form behind auth-aware CTA, always show navigation, add redirect context | 2-3 dev days | Frontend |
 | **P0** (Critical) | Practice usability | Add content padding under sticky nav, raise swipe threshold, enlarge question dots, clarify swipe hints | 2 dev days | Frontend |
 | **P1** (High) | Forms & Uploads | Progressive disclosure for research form, disable “Upload PDF” until ready, add validation feedback | 3 dev days | Frontend |
 | **P1** (High) | History & IA | Ship cross-page history sheet, rename search selector, improve dashboard empty state | 3-4 dev days | Frontend |
@@ -106,9 +97,9 @@ _Effort assumes two engineers sharing work without over-engineering; backlog can
 ---
 
 ## Quick Wins (≤ 1 week)
-- Re-enable default font stack and smoke-test hero/auth screens.
+- Re-enable default font stack and smoke-test Hireo hero/auth screens.
 - Render navigation for all users with Sign In / Docs / Support links.
-- Gate hero form with inline auth prompt and add sample data card.
+- Gate Hireo hero form with inline auth prompt and add sample data card.
 - Disable CV upload buttons with “Coming Soon” badge + privacy copy.
 - Increase practice question nav dots to 12px and add bottom padding.
 - Introduce redirect-aware banner on `/auth` (“Sign in to resume Practice”).
@@ -118,7 +109,7 @@ _Effort assumes two engineers sharing work without over-engineering; backlog can
 ## Validation & Follow-Up
 1. **UI verification:** Mobile Safari (iPhone SE + 14 Pro), Android Chrome, Desktop Chrome/Safari/Edge.  
 2. **Accessibility:** Run axe DevTools + manual keyboard walkthrough for home, auth, dashboard, and practice.  
-3. **Analytics hooks:** Track hero CTA clicks when unauthenticated to confirm gating reduces dead-end attempts.  
+3. **Analytics hooks:** Track Hireo hero CTA clicks when unauthenticated to confirm gating reduces dead-end attempts.  
 4. **User testing:** 3 returning users (practice heavy) + 2 new users (landing → auth → dashboard) to confirm improvements reduce confusion.  
 5. **Documentation:** Update `docs/UI_UX_REVIEW*.md` summaries once remediation ships instead of generating new stand-alone reports.
 
