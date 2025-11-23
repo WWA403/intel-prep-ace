@@ -92,8 +92,8 @@ Deno.test({
         },
         body: JSON.stringify({
           roleLinks: [
-            "https://www.google.com/about/careers/applications/jobs/results/123456789",
-            "https://careers.google.com/jobs/results/software-engineer"
+            "https://www.google.com/about/careers/applications/jobs/results/89308786006598342-software-engineer-early-career-2025-start",
+            "https://careers.google.com/jobs/results/132480917468783302-software-engineer/"
           ],
           searchId: searchId,
           company: "Google",
@@ -275,8 +275,8 @@ Deno.test({
         .from("searches")
         .insert({
           user_id: userId,
-          company: "Meta",
-          role: "Frontend Engineer",
+          company: "Amazon",
+          role: "Senior Cloud Infrastructure Architect",
           country: "United States",
           search_status: "pending"
         })
@@ -286,7 +286,7 @@ Deno.test({
       searchId = search?.id || null;
       console.log("  ✅ Test search created");
 
-      // Call with multiple URLs
+      // Call with multiple URLs (real job postings from different companies)
       console.log("  🔍 Analyzing multiple job posting URLs...");
       const functionUrl = `${supabaseUrl}/functions/v1/job-analysis`;
       const response = await fetch(functionUrl, {
@@ -297,13 +297,13 @@ Deno.test({
         },
         body: JSON.stringify({
           roleLinks: [
-            "https://www.metacareers.com/jobs/1234567890",
-            "https://www.metacareers.com/jobs/0987654321",
-            "https://www.metacareers.com/jobs/1111111111"
+            "https://www.amazon.jobs/en/jobs/2834090/senior-cloud-infrastructure-architect-aws-professional-services",
+            "https://www.amazon.jobs/en/jobs/2965070/senior-delivery-consultant-cloud-infrastructure-architect-wwps-proserve",
+            "https://www.amazon.jobs/en/jobs/3070621/aws-public-sector-senior-cloud-architect-cloud-infrastructure"
           ],
           searchId: searchId,
-          company: "Meta",
-          role: "Frontend Engineer"
+          company: "Amazon",
+          role: "Senior Cloud Infrastructure Architect"
         })
       });
 
