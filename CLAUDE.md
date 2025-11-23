@@ -439,7 +439,7 @@ The system underwent a major architectural redesign to improve reliability and p
 **For detailed information**, see:
 - `docs/OPTION_B_REDESIGN_COMPLETE.md` - Complete technical documentation
 - `docs/DEPLOYMENT_GUIDE.md` - Deployment procedures
-- `docs/README.md` - Documentation navigation
+- `README.md` (Documentation Hub) - Single navigation surface
 
 **Key Changes**:
 - `cv-job-comparison` microservice removed (functionality consolidated into `interview-research`)
@@ -463,7 +463,7 @@ The system underwent a major architectural redesign to improve reliability and p
 - **Optimized builds** via Vite
 
 ### Getting Help
-- **Documentation**: See `docs/README.md` for navigation to all guides
+- **Documentation**: See the Documentation Hub in `README.md` for navigation to all guides
 - **Architecture**: See `docs/OPTION_B_REDESIGN_COMPLETE.md` for system design
 - **Deployment**: See `docs/DEPLOYMENT_GUIDE.md` for deployment procedures
 - **Logs**: Check Supabase Dashboard → Functions → Logs for detailed error information

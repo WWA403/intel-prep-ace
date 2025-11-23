@@ -41,6 +41,53 @@ A modern, AI-powered interview preparation tool that helps small circles of frie
 - Secure authentication and data protection
 - Full CV management with intelligent parsing
 
+## 📚 Documentation Hub
+
+All documentation now lives in a single navigation surface so you don't need to jump into `docs/README.md` anymore.
+
+| Document | Why you need it | Notes |
+|----------|-----------------|-------|
+| [`CLAUDE.md`](./CLAUDE.md) | End-to-end developer playbook | Start here for architecture, commands, and workflows. |
+| [`docs/OPTION_B_REDESIGN_COMPLETE.md`](./docs/OPTION_B_REDESIGN_COMPLETE.md) | Deep dive on the November 2025 redesign | Includes diagrams, decision records, and migration details. |
+| [`docs/DEPLOYMENT_GUIDE.md`](./docs/DEPLOYMENT_GUIDE.md) | Deploying to Supabase (DB + Edge Functions) | Step-by-step instructions with troubleshooting. |
+| [`docs/RESEARCH_PIPELINE_IMPROVEMENTS.md`](./docs/RESEARCH_PIPELINE_IMPROVEMENTS.md) | Pipeline optimization backlog | Use for planning perf work. |
+| [`docs/UI_UX_ENHANCEMENT_PLAN.md`](./docs/UI_UX_ENHANCEMENT_PLAN.md) | Design backlog and heuristics | Reference when shipping UI polish. |
+
+### Role-Based Fast Track
+- **Developers:** Read `OPTION_B_REDESIGN_COMPLETE.md`, inspect `supabase/functions/interview-research/index.ts`, then follow `CLAUDE.md` commands.
+- **Operations/DevOps:** Follow `docs/DEPLOYMENT_GUIDE.md` in order: DB migration → Edge Functions → smoke tests → monitoring.
+- **Product & Stakeholders:** Skim the Option B summary below plus the UI/UX plan for roadmap context.
+
+### Key Files to Know
+- `supabase/functions/interview-research/index.ts` – unified synthesis function (Option B).
+- `supabase/migrations/20251116_redesign_option_b_search_artifacts.sql` – creates `search_artifacts` with indexes + RLS.
+- `src/services/searchService.ts` – frontend gateway that now reads from `search_artifacts`.
+
+## 🆕 Option B Redesign Snapshot (Nov 2025)
+
+The new pipeline (Option B) eliminates the old cv-job-comparison microservice in favor of a single, timeout-protected synthesis path that stores every artifact immediately.
+
+| Metric | Before | After | Delta |
+|--------|--------|-------|-------|
+| Database ops per search | 126–157 | 5–7 | 97% fewer |
+| Database write time | 30–180+ sec | < 3 sec | 97% faster |
+| Failure points | 6+ | 2–3 | 97% fewer |
+| Data retention | Partial | 100% | Full raw data saved |
+| Reliability | 85% | 99%+ | +16 pts |
+
+**Key architectural highlights**
+- Raw data lands in `search_artifacts` instantly, so retries can reuse prior work.
+- Unified OpenAI call produces stages, STAR stories, gap analysis, and ~140 questions at once.
+- Consistent timeout helpers around every DB call prevent zombie writes.
+- Frontend now consumes a single artifact payload, simplifying query logic.
+
+### Deployment Status
+- ✅ Code updates merged to `dev-q`.
+- ✅ Documentation refreshed (this README + Option B deep dive).
+- ⏳ Supabase migration deployment pending (`20251116_redesign_option_b_search_artifacts.sql`).
+- ⏳ Edge Function redeploy pending (`interview-research`).
+- ⏳ Full system QA + monitoring pass pending after rollout.
+
 ## 🚀 Quick Start
 
 ### Prerequisites
@@ -73,6 +120,49 @@ A modern, AI-powered interview preparation tool that helps small circles of frie
    - Read targeted preparation guidance
    - Practice with company-specific questions
    - Save results for future reference
+
+## 📋 MVP Status & Development Backlog
+
+> **Last Updated:** November 23, 2025  
+> **Current MVP Completion:** ~86% (Option B shipped; UI polish + research QA outstanding)
+
+### 🎯 Status Snapshot
+- ✅ Option B research pipeline + synthesis rewrite deployed (see `docs/RESEARCH_PIPELINE_IMPROVEMENTS.md`).
+- ⚠️ UI/UX regressions tracked in `docs/UI_UX_ENHANCEMENT_PLAN.md` block critical onboarding and practice flows.
+- ⚙️ Supabase + Edge Functions ready; need final migration + redeploy before reopening sign-ups.
+- 🚧 Audio transcription and analytics remain outside MVP scope but stay on deck.
+
+### 🚦 Priority Board (Next 2 Sprints)
+| Priority | Initiative | High-Level Goal | Owner | Reference |
+| --- | --- | --- | --- | --- |
+| **P0** | Rendering & Access Hardening | Fix global glyph bug, gate Hireo landing for logged-out users, always show lightweight nav, surface redirect context. | Frontend | `docs/UI_UX_ENHANCEMENT_PLAN.md#1-access-onboarding--communication` |
+| **P0** | Practice Usability | Increase swipe thresholds, add bottom padding below sticky nav, enlarge nav dots ≥12 px, fix hint overlap. | Frontend | `docs/UI_UX_ENHANCEMENT_PLAN.md#4-practice-experience` |
+| **P1** | Forms & Uploads Slimdown | Split research form into required/advanced accordions, add inline validation + counters, disable CV upload until storage ships. | Frontend | `docs/UI_UX_ENHANCEMENT_PLAN.md#2-copy-typography--form-inputs` |
+| **P1** | History & IA Refresh | Rename search selector to “Active Research,” add helper text + empty states, ship cross-page history sheet. | Frontend | `docs/UI_UX_ENHANCEMENT_PLAN.md#3-navigation--information-architecture` |
+| **P1** | Accessibility & Safe Areas | Define z-index scale (nav 40/dialog 80/toast 100), add aria-labels + stronger focus rings, enforce 44 px touch targets + safe-area padding. | Frontend | `docs/UI_UX_ENHANCEMENT_PLAN.md#5-accessibility--responsiveness` |
+| **P1** | Research Pipeline Adoption | Configure `OPENAI_MODEL` secrets, remove temp params, monitor question depth (30–50) + tailoring via new question-first prompt. | Backend | `docs/RESEARCH_PIPELINE_IMPROVEMENTS.md` |
+| **P2** | Practice Setup & Guidance | Convert filters to stepper with presets, clarify voice recording limitations, collapse rationale behind toggle. | Frontend + Design | `docs/UI_UX_ENHANCEMENT_PLAN.md#4-practice-experience` |
+| **P2** | Feedback & Status Consistency | Shared loading pattern (skeletons + progress dialog), inline success states for saves, autosave notes w/ debounce + error CTAs. | Frontend | `docs/UI_UX_ENHANCEMENT_PLAN.md#6-feedback--status-communication` |
+| **P3** | Visual Polish & Systemization | Standardize spacing, button sizing, progress + badge variants; fold into design system hygiene. | Design System | `docs/UI_UX_ENHANCEMENT_PLAN.md#prioritized-backlog` |
+
+### 🧪 Research Pipeline Follow-Ups
+- **P0:** Set `OPENAI_MODEL` secret to `gpt-5-nano` (or desired default) before redeploying `interview-research`; confirm Edge Functions read new env vars.
+- **P1:** Run end-to-end research smoke tests to verify 30–50 deeply tailored questions, per `docs/RESEARCH_PIPELINE_IMPROVEMENTS.md` testing checklist.
+- **P1:** Monitor logs for GPT-5 temperature warnings (should be gone) and ensure question-first prompt generates real-question variations.
+- **P2:** Backfill analytics that compare question quality pre/post rewrite to quantify lift.
+
+### ⚡ Quick Wins (≤ 1 Week)
+- Re-enable Tailwind `font-sans` stack, smoke-test Hireo auth copy.
+- Always render nav (Logo + Docs + Support + Sign in) regardless of auth state.
+- Gate Hireo form with inline auth prompt + sample data card.
+- Disable CV upload (“Coming Soon”) with privacy copy describing roadmap.
+- Increase practice nav dots to 12 px and add `pb-24` (plus safe-area inset) under sticky nav.
+- Add redirect-aware banner on `/auth` (“Sign in to resume Practice”).
+
+### 📚 Historical Context
+- Completed epics (seniority personalization, sampler, favorites, swipe gestures) now live inside the product; see `docs/IMPLEMENTATION_CHANGES.md` for deep dives.
+- Option B architectural notes remain in `docs/OPTION_B_REDESIGN_COMPLETE.md`.
+- Audio transcription, timer presets, analytics dashboards stay parked until the above priorities land.
 
 ## 🏗️ Architecture
 
@@ -464,640 +554,24 @@ Per-Search Override:
 
 ---
 
-## 📋 MVP Status & Development Backlog
-
-> **Last Updated:** October 25, 2025  
-> **Current MVP Completion:** ~82% (21/30 core features complete)
-
-### 🎯 PRD vs Implementation Status
-
-#### ✅ **Implemented Features** (75%)
-- Email/password authentication with Supabase
-- Company research with multi-source AI analysis
-- Job description and CV analysis
-- **Seniority-based personalization** (junior/mid/senior) ✨ NEW
-- Interview stages generation (4-6 stages per company)
-- Question generation (120-150 questions per search)
-- **Experience-level adaptation** with smart fallback logic ✨ NEW
-- **Question session sampler** with configurable size (default: 10) ✨ NEW
-- **Favorite & flag questions** (favorite/needs_work/skipped) ✨ NEW
-- Practice mode with filtering by stage/category/difficulty/favorites
-- Voice recording capability
-- Session tracking and answer persistence
-- Real-time research progress tracking
-- Search history and result caching
-
-#### ⚠️ **Partially Implemented** (20%)
-- **Session Summary**: Shows answered count, missing summary page
-- **Location Field**: Country exists, not city-level
-- **Timer**: Running timer exists, no presets (30/60/90s)
-- **Question Quality**: Has confidence scoring, no user rating
-- **Progress Analytics**: No dashboard (planned)
-
-#### 🔴 **Critical Gaps** (5%)
-1. ~~**Seniority-Based Personalization**~~ ✅ **COMPLETED** (Epic 1.1)
-2. ~~**Question Session Sampler**~~ ✅ **COMPLETED** (Epic 1.2)
-3. ~~**Favorite/Flag Questions**~~ ✅ **COMPLETED** (Epic 1.3)
-4. ~~**Swipe/Gesture Interface**~~ ✅ **COMPLETED** (Epic 2.1)
-5. **Audio STT (Speech-to-Text)** - Voice records but doesn't transcribe
-6. **AI Answer Feedback** - Not implemented (out of MVP scope per PRD)
-
----
-
-### 🚀 Development Backlog
-
-#### **PHASE 1: Critical MVP Gaps** (2-3 weeks)
-
-<details>
-<summary><b>✅ Epic 1.1: Seniority-Based Personalization</b> ✅ COMPLETED (Oct 25, 2024)</summary>
-
-**User Story**: As a user, I want to specify my seniority level so questions match my experience level.
-
-**Tasks**:
-- [x] Add `seniority` enum to `profiles` table (`junior`, `mid`, `senior`)
-- [x] Add `target_seniority` to `searches` table
-- [x] Add seniority selector to Profile page
-- [x] Add seniority field to Home search form
-- [x] Update question generator to adapt difficulty by seniority
-- [x] Create and test database migration
-
-**Implementation Details**:
-- ✅ Database migration: `20251025000000_add_seniority_fields.sql`
-- ✅ Profile page: Experience Level card with dropdown selector
-- ✅ Home page: Target Level field (optional, defaults to auto-detect)
-- ✅ Smart fallback logic: User selection → Profile seniority → CV inference → Default 'mid'
-- ✅ Question generator: Same volume (120-150), different complexity based on level
-
-**Files Changed**:
-- `supabase/migrations/20251025000000_add_seniority_fields.sql` - New migration
-- `src/pages/Profile.tsx` - Experience Level card with selector
-- `src/pages/Home.tsx` - Target Level field in search form
-- `src/services/searchService.ts` - Profile update methods
-- `supabase/functions/interview-research/index.ts` - Pass targetSeniority
-- `supabase/functions/interview-question-generator/index.ts` - Fallback logic implementation
-</details>
-
-<details>
-<summary><b>✅ Epic 1.2: Question Session Sampler</b> ✅ COMPLETED (Oct 25, 2025)</summary>
-
-**User Story**: As a user, I want practice sessions with configurable question counts (not 100+).
-
-**Tasks**:
-- [x] Create `sessionSampler.ts` with smart selection algorithm
-- [x] Implement random sampling respecting current filters
-- [x] Update Practice.tsx to use sampled questions
-- [x] Add configurable sample size input (default: 10)
-- [x] Add "Start New Practice Session" button
-- [x] Add "Show All Questions" toggle
-
-**Implementation Details**:
-- ✅ Simple MVP approach - no over-engineering
-- ✅ Default 10 questions, user can input 1-100
-- ✅ Samples respect user's current stage/category/difficulty filters
-- ✅ Fisher-Yates shuffle for random sampling
-- ✅ "Start New Practice Session" triggers sampling
-- ✅ "Show All Questions" disables sampling
-- ✅ Skipped `last_practiced_at` tracking (not needed for MVP)
-
-**Files Created/Changed**:
-- `src/services/sessionSampler.ts` - New service with random sampling
-- `src/pages/Practice.tsx` - Added session sampler UI and logic
-</details>
-
-<details>
-<summary><b>✅ Epic 1.3: Favorite & Flag Questions</b> ✅ COMPLETED (Oct 25, 2025)</summary>
-
-**User Story**: As a user, I want to favorite important questions and flag difficult ones.
-
-**Tasks**:
-- [x] Create `user_question_flags` table (favorite/needs_work/skipped)
-- [x] Add `setQuestionFlag()`, `removeQuestionFlag()`, and `getQuestionFlags()` to service
-- [x] Add favorite/flag buttons to question cards
-- [x] Add "Show Favorites Only" filter to practice mode
-- [x] Sampler works with favorites (filters applied before sampling)
-
-**Implementation Details**:
-- ✅ Database migration: `20251025120000_add_user_question_flags.sql`
-- ✅ Service methods: `setQuestionFlag()`, `removeQuestionFlag()`, `getQuestionFlags()`
-- ✅ Practice page: Flag buttons (⭐ Favorite, 🚩 Needs Work, ⏭️ Skip)
-- ✅ Setup screen: "Show Favorites Only" checkbox filter
-- ✅ Toggle behavior: Click same flag to remove it
-- ✅ Unique constraint: One flag per user per question (UPSERT pattern)
-
-**Files Created/Changed**:
-- `supabase/migrations/20251025120000_add_user_question_flags.sql` - New migration
-- `src/services/searchService.ts` - Added flag methods
-- `src/pages/Practice.tsx` - Added flag buttons and favorites filter
-</details>
-
----
-
-#### **PHASE 2: Enhanced UX** (2 weeks)
-
-<details>
-<summary><b>✅ Epic 2.1: Swipe Gesture Interface</b> ✅ COMPLETED (Nov 2, 2025)</summary>
-
-**User Story**: As a user, I want to use swipe gestures to navigate and interact with practice questions.
-
-**Tasks**:
-- [x] Install `react-swipeable` or `framer-motion`
-- [x] Implement swipe handlers (left=skip, right=favorite, up=guidance)
-- [x] Add visual swipe indicators
-- [x] Test on iOS/Android mobile devices
-
-**Implementation Details**:
-- ✅ Installed `react-swipeable` library (lightweight, simple)
-- ✅ Swipe left: Skip to next question
-- ✅ Swipe right: Toggle favorite flag
-- ✅ Swipe up: Toggle detailed guidance display (answer approach, evaluation criteria, follow-up questions)
-- ✅ Visual feedback: Color-coded overlay with icons during swipe
-- ✅ Swipe hints: Subtle indicators showing available gestures
-- ✅ Works on both touch (mobile) and mouse drag (desktop)
-- ✅ Smooth animations and transitions
-- ✅ Prevents scroll interference during swipes
-
-**Files Changed**:
-- `package.json` - Added `react-swipeable` dependency
-- `src/pages/Practice.tsx` - Added swipe handlers, visual feedback, and guidance toggle
-</details>
-
-<details>
-<summary><b>Epic 2.2: Audio Transcription (STT)</b> ⏱️ 5 days</summary>
-
-**User Story**: As a user, I want my voice answers transcribed automatically.
-
-**Tasks**:
-- [ ] Choose STT provider (OpenAI Whisper vs Browser Web Speech API)
-- [ ] Create `transcribeAudio` Edge Function (if Whisper)
-- [ ] Update `savePracticeAnswer` to transcribe audio
-- [ ] Display transcript after recording
-- [ ] Ensure P95 latency ≤ 6s (per PRD)
-
-**Provider Comparison**:
-- **OpenAI Whisper**: $0.006/min, high accuracy, requires API
-- **Web Speech API**: Free, browser-native, lower accuracy
-
-**Files to Change**:
-- `supabase/functions/transcribe-audio/` - New function
-- `src/services/searchService.ts` - Add transcription
-- `src/pages/Practice.tsx` - Display transcript
-</details>
-
-<details>
-<summary><b>Epic 2.3: Timer Presets</b> ⏱️ 2 days</summary>
-
-**Tasks**:
-- [ ] Add timer preset buttons (30/60/90s)
-- [ ] Implement countdown timer (vs count-up)
-- [ ] Add visual/audio alert on expiry
-- [ ] Save user's preferred preset to profile
-
-**Files to Change**:
-- `src/pages/Practice.tsx` - Timer controls
-- `src/pages/Profile.tsx` - Save preference
-</details>
-
-<details>
-<summary><b>Epic 2.4: Session Summary & Completion</b> ⏱️ 3 days</summary>
-
-**Tasks**:
-- [ ] Create `SessionSummary` component
-- [ ] Display answered/skipped/favorited breakdown
-- [ ] Add session notes field
-- [ ] Mark session as completed in DB
-
-**Files to Create/Change**:
-- `src/components/SessionSummary.tsx` - New component
-- `src/pages/Practice.tsx` - Show on completion
-- Database: Add `session_notes` to `practice_sessions`
-</details>
-
----
-
-#### **PHASE 3: Performance & Polish** (1 week)
-
-<details>
-<summary><b>Epic 3.1: Progress Analytics Dashboard</b> ⏱️ 4 days</summary>
-
-**Tasks**:
-- [ ] Create Analytics section in Profile/Dashboard
-- [ ] Add `getPracticeAnalytics(userId, days)` method
-- [ ] Display charts (questions/day, completion rate, categories)
-- [ ] Use `recharts` library (already installed)
-
-**Metrics to Track**:
-- Questions answered per day (last 30 days)
-- Session completion rate
-- Category breakdown (behavioral vs technical)
-- Favorite question count
-</details>
-
-<details>
-<summary><b>Epic 3.2: Performance Optimization</b> ⏱️ 3 days</summary>
-
-**Tasks**:
-- [ ] Add performance monitoring (measure P95 latency)
-- [ ] Lazy load Practice page components
-- [ ] Implement question pagination (vs loading 100+)
-- [ ] Optimize `getSearchResults` query
-- [ ] Add service worker for offline support
-
-**Performance Targets** (from PRD):
-- App shell load: < 2s on 5G
-- API response P95: < 500ms
-- Research first set: 60-90s (currently 2-5 mins)
-</details>
-
----
-
-#### **PHASE 4: Quality & Infrastructure** (Ongoing)
-
-<details>
-<summary><b>Epic 4.1: Critical Component Testing</b> ⏱️ Ongoing</summary>
-
-**User Story**: As a developer, I want critical components to be tested so we can catch regressions and ensure core functionality works reliably.
-
-**Goals**:
-- Add testing for critical components without over-engineering
-- Focus on core functionality that impacts user experience
-- Ensure test coverage for business-critical paths
-
-**Tasks**:
-- [ ] Identify critical components (e.g., search service, question generation, authentication)
-- [ ] Set up testing framework (Jest/Vitest + React Testing Library)
-- [ ] Write unit tests for core services (searchService, sessionSampler)
-- [ ] Write integration tests for critical user flows (search → results → practice)
-- [ ] Add tests for Edge Functions (interview-research, question-generator)
-- [ ] Set up CI/CD test pipeline
-- [ ] Document testing strategy and coverage goals
-
-**Testing Priorities**:
-- ✅ Authentication flow (login, signup, session management)
-- ✅ Search service (API calls, data transformation)
-- ✅ Question generation and filtering logic
-- ✅ Practice session management
-- ⚠️ UI components (lower priority, focus on logic)
-
-**Approach**:
-- Don't test every single component
-- Focus on business logic and critical user paths
-- Keep tests maintainable and fast
-- Use integration tests over unit tests where appropriate
-
-**Files to Create/Change**:
-- `src/__tests__/` - Test directory structure
-- `src/services/__tests__/` - Service tests
-- `supabase/functions/__tests__/` - Edge function tests
-- `vitest.config.ts` or `jest.config.js` - Test configuration
-</details>
-
-<details>
-<summary><b>Epic 4.2: Research Pipeline Enhancements</b> ⏱️ Ongoing</summary>
-
-**User Story**: As a product, we want to continuously improve the research pipeline to provide better, more accurate interview preparation data.
-
-**Goals**:
-- Identify and implement enhancements to the research pipeline
-- Improve data quality and relevance
-- Optimize performance and reliability
-- Explore new data sources and AI capabilities
-
-**Tasks**:
-- [ ] Analyze current pipeline performance and identify bottlenecks
-- [ ] Research additional data sources (beyond Glassdoor, Levels.fyi, Blind)
-- [ ] Improve AI prompt engineering for better question quality
-- [ ] Enhance company research accuracy and coverage
-- [ ] Optimize Tavily search queries for better results
-- [ ] Add fallback mechanisms for API failures
-- [ ] Implement caching strategies for repeated searches
-- [ ] Explore advanced AI features (multi-modal, better context understanding)
-- [ ] Add quality metrics and monitoring
-
-**Areas for Enhancement**:
-- **Data Sources**: Explore additional platforms (Reddit, Quora, company blogs)
-- **AI Quality**: Better prompt engineering, fine-tuning, structured outputs
-- **Performance**: Parallel processing, caching, incremental updates
-- **Reliability**: Better error handling, retry logic, graceful degradation
-- **Accuracy**: Validation mechanisms, user feedback loops
-
-**Files to Review/Change**:
-- `supabase/functions/interview-research/index.ts` - Main research orchestrator
-- `supabase/functions/company-research/index.ts` - Company data gathering
-- `supabase/functions/_shared/tavily-client.ts` - Search optimization
-- `supabase/functions/_shared/openai-client.ts` - AI prompt improvements
-</details>
-
-<details>
-<summary><b>Epic 4.3: Front-End UI/UX Improvements</b> ⏱️ Ongoing</summary>
-
-**User Story**: As a user, I want a clean, intuitive interface where components don't overlap and all steps are clearly visible.
-
-**Goals**:
-- Fix component overlapping issues
-- Ensure all workflow steps are visible and accessible
-- Improve visual hierarchy and spacing
-- Create a more polished, professional interface
-
-**Tasks**:
-- [ ] Audit current UI for overlapping components
-- [ ] Fix z-index and positioning issues
-- [ ] Improve responsive design for mobile/tablet/desktop
-- [ ] Add missing UI steps in workflows (e.g., search → results → practice flow)
-- [ ] Improve spacing and layout consistency
-- [ ] Enhance visual feedback for user actions
-- [ ] Add loading states and transitions
-- [ ] Improve error messages and empty states
-- [ ] Conduct usability testing and gather feedback
-
-**Known Issues**:
-- Components overlapping with each other
-- Missing steps in user workflows
-- Inconsistent spacing and layout
-- Unclear visual hierarchy
-
-**Areas to Improve**:
-- **Layout**: Fix overlapping components, improve grid/flex layouts
-- **Navigation**: Ensure all steps are accessible, add breadcrumbs/progress indicators
-- **Responsive Design**: Better mobile experience, tablet optimization
-- **Visual Polish**: Consistent spacing, better typography, improved color usage
-- **User Feedback**: Better loading states, error messages, success indicators
-
-**Files to Review/Change**:
-- `src/pages/Home.tsx` - Search interface
-- `src/pages/Dashboard.tsx` - Results display
-- `src/pages/Practice.tsx` - Practice mode
-- `src/components/Navigation.tsx` - Navigation structure
-- `src/components/ui/` - Component library consistency
-- `src/index.css` - Global styles and spacing
-</details>
-
-<details>
-<summary><b>Epic 4.4: Database Cleanup - Remove Unused Tables</b> ⏱️ 2-3 days</summary>
-
-**User Story**: As a developer, I want to clean up unused tables in Supabase to reduce database complexity, improve maintainability, and reduce costs.
-
-**Goals**:
-- Identify and remove unused or deprecated tables
-- Clean up orphaned data and relationships
-- Reduce database schema complexity
-- Improve query performance by removing unnecessary tables
-- Document which tables are actually in use
-
-**Tasks**:
-- [ ] Audit all tables in Supabase database
-- [ ] Identify tables that are no longer referenced in code
-- [ ] Check for tables from old migrations that are deprecated
-- [ ] Verify no active queries or Edge Functions reference unused tables
-- [ ] Check for foreign key dependencies before removal
-- [ ] Create backup of data before deletion (if needed)
-- [ ] Remove unused tables via migration
-- [ ] Update documentation to reflect current schema
-- [ ] Verify application still works after cleanup
-
-**Approach**:
-- Review all migrations to understand table history
-- Search codebase for table references (grep for table names)
-- Check Edge Functions for database queries
-- Verify RLS policies are not dependent on unused tables
-- Use Supabase MCP tools to list and analyze tables
-
-**Tables to Investigate**:
-- Review all tables in `public` schema
-- Check for legacy tables from previous implementations
-- Identify tables that may have been replaced by newer designs (e.g., `search_artifacts` consolidation)
-
-**Files to Review/Change**:
-- `supabase/migrations/` - Review all migrations to understand table evolution
-- `supabase/functions/**/index.ts` - Check for table references
-- `src/services/searchService.ts` - Verify which tables are actually queried
-- `supabase/schema.sql` - Update schema documentation
-- Create new migration: `supabase/migrations/YYYYMMDD_cleanup_unused_tables.sql`
-
-**Risk Assessment**:
-- ⚠️ **Medium Risk**: Need to ensure no active code references removed tables
-- ✅ **Low Risk**: Can be done incrementally, one table at a time
-- ✅ **Reversible**: Can restore from migration history if needed
-</details>
-
-<details>
-<summary><b>Epic 4.5: Project Rebranding - Intel Prep/INT → hireo</b> ⏱️ 3-5 days</summary>
-
-**User Story**: As a product, we need to rebrand the entire application from "Intel Prep" or "INT" to "Hireo" (H-I-R-E-O) across all code, documentation, and user-facing content.
-
-**Goals**:
-- Replace all instances of "Intel Prep" and "INT" with "Hireo"
-- Update branding throughout the application
-- Ensure consistent naming across codebase, documentation, and UI
-- Update project metadata, package names, and configuration files
-
-**Tasks**:
-- [x] Search codebase for all instances of "Intel Prep", "INT", "intel-prep", "intel_prep"
-- [x] Update application title and branding in UI components
-- [x] Update README.md and all documentation files
-- [x] Update package.json name and description
-- [x] Update HTML title tags and meta tags
-- [x] Update favicon and logo assets (if applicable)
-- [x] Update environment variable names (if any reference old name)
-- [x] Update database table names or comments (if they reference old name)
-- [x] Update Edge Function names or comments
-- [x] Update error messages and user-facing text
-- [x] Update navigation labels and page titles
-- [x] Update documentation in `docs/` folder
-- [x] Update any external references (e.g., deployment configs, CI/CD)
-- [x] Verify no broken references after rebranding
-- [x] Test application to ensure all changes work correctly
-
-**Search Patterns to Find**:
-- "Intel Prep" (case-insensitive)
-- "INT" (as project name, not generic "int")
-- "intel-prep" (kebab-case)
-- "intel_prep" (snake_case)
-- "intelPrep" (camelCase)
-- "IntelPrep" (PascalCase)
-
-**Files to Review/Change**:
-- `README.md` - Project title and description
-- `package.json` - Package name and description
-- `index.html` - HTML title and meta tags
-- `src/App.tsx` - Application title
-- `src/components/Navigation.tsx` - Navigation labels
-- `src/pages/**/*.tsx` - Page titles and headings
-- `docs/**/*.md` - All documentation files
-- `supabase/functions/**/index.ts` - Function comments and error messages
-- `public/favicon.ico` - Update if needed
-- `.env` files - Check for project name references
-- Deployment configurations (if any)
-
-**Areas to Update**:
-- **UI Text**: All user-facing strings, page titles, headings
-- **Code Comments**: Developer-facing documentation in code
-- **Documentation**: README, docs folder, inline comments
-- **Metadata**: Package.json, HTML meta tags, app manifest
-- **Branding Assets**: Logos, favicons, splash screens (if applicable)
-
-**Approach**:
-- Use grep/search to find all occurrences first
-- Create a checklist of files to update
-- Update systematically by category (UI → Code → Docs → Config)
-- Test after each category to catch issues early
-- Use find/replace carefully to avoid breaking code
-
-**Risk Assessment**:
-- ⚠️ **Medium Risk**: Need to ensure no broken references or functionality
-- ✅ **Low Risk**: Mostly text changes, no logic changes
-- ✅ **Reversible**: Can use git to revert if needed
-- ⚠️ **Attention**: Need to be careful with case-sensitive replacements
-</details>
-
-<details>
-<summary><b>Epic 4.6: CV Parsing and Profile Management</b> ⏱️ 5-7 days</summary>
-
-**User Story**: As a user, I want my CV content to be properly parsed, saved, and accessible in my profile so I can reuse it for future searches without re-uploading.
-
-**Problem Statement**:
-Currently, CV parsing and saving functionality is not working correctly. Users can paste CV content, but it doesn't appear in their personal profile for future use. The CV data is not being properly persisted or retrieved.
-
-**Goals**:
-- Fix CV parsing and saving functionality
-- Ensure CV data is properly stored in the database
-- Make saved CVs accessible in user profile
-- Allow users to view, edit, and manage their saved CVs
-- Enable CV reuse across multiple searches
-- Improve CV parsing accuracy and data extraction
-
-**Tasks**:
-- [ ] Investigate current CV parsing flow (frontend → backend → database)
-- [ ] Identify where CV data is being lost or not saved
-- [ ] Review `resumes` table structure and RLS policies
-- [ ] Check CV upload/paste functionality in Home page
-- [ ] Verify CV analysis Edge Function is saving data correctly
-- [ ] Test CV retrieval in Profile page
-- [ ] Fix database insertion/update logic for CVs
-- [ ] Fix CV retrieval logic in Profile page
-- [ ] Add UI to display saved CVs in Profile
-- [ ] Add ability to edit/update saved CVs
-- [ ] Add ability to delete saved CVs
-- [ ] Add ability to select saved CV for new searches
-- [ ] Improve CV parsing accuracy (skills, experience, education extraction)
-- [ ] Add validation for CV content
-- [ ] Add error handling and user feedback
-- [ ] Test end-to-end CV flow (upload → save → retrieve → reuse)
-
-**Areas to Investigate**:
-- **Frontend**: CV input handling, form submission, state management
-- **Backend**: CV analysis Edge Function, database operations
-- **Database**: `resumes` table schema, RLS policies, data integrity
-- **Profile Page**: CV display, management UI, retrieval logic
-- **Search Flow**: CV selection for new searches, CV reuse
-
-**Files to Review/Change**:
-- `src/pages/Home.tsx` - CV upload/paste functionality
-- `src/pages/Profile.tsx` - CV display and management
-- `src/services/searchService.ts` - CV save/retrieve methods
-- `supabase/functions/cv-analysis/index.ts` - CV parsing logic
-- `supabase/migrations/` - Review `resumes` table schema
-- Database: Check `resumes` table RLS policies
-- `src/integrations/supabase/types.ts` - Type definitions for resumes
-
-**Expected Behavior**:
-- User pastes/uploads CV → CV is parsed and saved to database
-- User navigates to Profile → Can see their saved CV(s)
-- User can edit/update saved CV
-- User can select saved CV when starting new search
-- CV data persists across sessions
-- CV parsing extracts: skills, experience, education, contact info
-
-**Design Considerations**:
-- Support multiple CVs per user (different versions/formats)
-- Allow CV preview before saving
-- Show parsing results (what was extracted)
-- Provide feedback on parsing quality
-- Support both text paste and file upload
-- Handle CV format variations (PDF, DOCX, plain text)
-
-**Risk Assessment**:
-- 🟡 **High Priority**: Core functionality that users expect to work
-- ⚠️ **Medium Risk**: Need to ensure data migration for existing users
-- ✅ **Low Risk**: Can be fixed incrementally
-- ⚠️ **Attention**: May need to handle existing CV data that wasn't saved properly
-</details>
-
----
-
-### 📊 Priority Matrix
-
-| Epic | Priority | Effort | User Impact | Business Value |
-|------|----------|--------|-------------|----------------|
-| ~~**1.1 Seniority Personalization**~~ | ✅ Complete | Medium | High | High |
-| ~~**1.2 Question Sampler**~~ | ✅ Complete | Medium | Very High | Very High |
-| ~~**1.3 Favorite/Flag**~~ | ✅ Complete | Low | High | Medium |
-| ~~**2.1 Swipe Gestures**~~ | ✅ Complete | Low | Medium | Low |
-| **2.2 Audio STT** | 🟡 High | High | Very High | High |
-| **2.4 Session Summary** | 🟡 High | Low | Medium | Medium |
-| **2.3 Timer Presets** | 🟢 Medium | Low | Low | Low |
-| **3.1 Analytics Dashboard** | 🟢 Medium | Medium | Medium | Medium |
-| **3.2 Performance** | 🟡 High | Medium | High | High |
-| **4.1 Critical Component Testing** | 🟡 High | Medium | High | High |
-| **4.2 Research Pipeline Enhancements** | 🟡 High | High | Very High | Very High |
-| **4.3 Front-End UI/UX Improvements** | 🟡 High | Medium | Very High | High |
-| **4.4 Database Cleanup - Remove Unused Tables** | 🟢 Medium | Low | Low | Medium |
-| ~~**4.5 Project Rebranding - Intel Prep/INT → Hireo**~~ | ✅ Complete | Medium | Medium | High |
-| **4.6 CV Parsing and Profile Management** | 🔴 Critical | Medium | Very High | Very High |
-
----
-
-### 🎯 Recommended Sprint Plan
-
-#### **Sprint 1** (Week 1-2): Foundation
-- ✅ Epic 1.1: Seniority Personalization (5 days) - **COMPLETED Oct 25, 2025**
-- ✅ Epic 1.2: Question Sampler (4 days) - **COMPLETED Oct 25, 2025**
-- ✅ Epic 1.3: Favorite/Flag Questions (3 days) - **COMPLETED Oct 25, 2025**
-
-#### **Sprint 2** (Week 3-4): Enhanced UX
-- ✅ Epic 2.1: Swipe Gestures (3 days) - **COMPLETED Nov 2, 2025**
-- ✅ Epic 2.2: Audio STT (5 days)
-- ✅ Epic 2.4: Session Summary (3 days)
-
-#### **Sprint 3** (Week 5): Polish
-- ✅ Epic 2.3: Timer Presets (2 days)
-- ✅ Epic 3.1: Progress Analytics (4 days)
-
-**Total Estimated Time**: 5-6 weeks (1 developer)
-
----
-
-### 📈 Success Metrics (Post-Implementation)
-
-After completing the backlog, track these metrics to validate success:
-
-- **User Engagement**: ≥20% of sign-ups complete 1+ practice sessions
-- **Session Quality**: Average 10-15 questions per session (vs current 100+)
-- **Audio Adoption**: ≥30% of answers use voice recording
-- **Favoriting**: ≥40% of users favorite at least 5 questions
-- **Performance**: Research completion time ≤ 90 seconds (P95)
-- **STT Latency**: Transcription time ≤ 6 seconds (P95)
-
----
-
 ### 🛠️ Contributing to the Backlog
+**Before Starting Work**
+1. Check the priority board above and confirm ownership in Slack.
+2. Read the full PRD in `docs/PRODUCT_DESIGN.md` and relevant deep dives.
+3. Review technical design in `docs/TECHNICAL_DESIGN.md`.
+4. Create a branch (`feature/<initiative>-short-slug`).
 
-**Before Starting Work**:
-1. Check this backlog for assigned epics
-2. Read the full PRD in `docs/PRODUCT_DESIGN.md`
-3. Review technical design in `docs/TECHNICAL_DESIGN.md`
-4. Create a feature branch: `git checkout -b feature/epic-X.Y-description`
+**During Development**
+1. Keep README backlog tables in sync (check off items or adjust owners).
+2. Document deviations inside the relevant doc (`docs/UI_UX_ENHANCEMENT_PLAN.md`, etc.).
+3. Write or update automated tests when changing behavior.
+4. Update any affected docs/diagrams before opening a PR.
 
-**During Development**:
-1. Update task checkboxes as you complete them
-2. Document any deviations from the plan
-3. Write tests for new functionality
-4. Update relevant documentation
-
-**After Completion**:
-1. Mark epic as ✅ complete with date
-2. Update this README with new features
-3. Update `docs/IMPLEMENTATION_CHANGES.md`
-4. Submit PR for review
+**After Completion**
+1. Mark the initiative as shipped with a date in this README.
+2. Append a short summary to `docs/IMPLEMENTATION_CHANGES.md`.
+3. Link QA notes or Supabase logs in the PR description.
+4. Tag product/design for sign-off when UI or copy changed.
 
 ---
 
