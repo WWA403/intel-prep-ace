@@ -220,3 +220,105 @@ supabase secrets set OPENAI_MODEL=gpt-5-nano
 - Temperature removal works with both GPT-4 and GPT-5 models
 - Question count reduction improves quality without breaking existing functionality
 - All changes are backward compatible - existing functionality preserved
+
+## Holistic Interview Intelligence Blueprint
+
+The improvements above fix structural issues, but the pipeline also needs a research methodology that mirrors how top interviewers operate. Below is a blueprint we can align on to ensure every artifact we produce contains deep, domain-aware insight instead of surface-level bullet points.
+
+### Objectives for a World-Class Pipeline
+- **True signal capture**: Gather the context interviewers actually rely on—decision criteria, red flags, calibration anchors, and lived interview experiences.
+- **Framework-backed reasoning**: Tie each insight to established interview frameworks (BAR Raiser loops, STAR/SOAR storytelling, system-design heuristics, product-sense ladders, etc.).
+- **Bidirectional prep**: Generate assets that help both the interviewer (what to ask, how to probe, scoring lenses) and the interviewee (how to prepare, how to evidence competency).
+- **Continuous enrichment**: Close the loop after every interview to ingest new anecdotes, update rubrics, and refine prompts automatically.
+
+### High-Leverage Insight Sources Beyond Current Feeders
+1. **Candidate narratives**: Pull full STAR/SOAR stories, not just achievement summaries, so we know the situation, inflection points, and measurable outcomes.
+2. **Interviewer debriefs**: Capture what strong candidates did differently, calibrations on “meets bar” vs “greatly exceeds,” and common failure patterns.
+3. **Process artifacts**: Onsite agendas, interviewer assignment matrices, take-home briefs, loop calibration docs.
+4. **Role-specific scenario banks**: Real case prompts (e.g., “Design Aurora’s ML-driven pricing engine”) with expected depth, guardrails, and trick follow-ups.
+5. **Competitor benchmarks**: How other companies evaluate similar roles, to cross-pollinate novel question styles and stress tests.
+6. **Macro signals**: Market shifts (e.g., “cloud cost efficiency is a 2025 theme”) that should influence what we probe in interviews.
+
+### Domain-Grade Framework Layer
+| Layer | Purpose | Examples |
+| --- | --- | --- |
+| Competency lattice | Map skills × depth (“architect”, “operator”, “coach”) | Amazon LPs, Google GCA, Meta craft pillars |
+| Narrative structuring | Force actionable storytelling | STAR, SOAR, SCORE, ICARE |
+| Evaluation heuristics | Encode interviewer mental models | Bar-raiser fatal flaws, “5 Why” follow-ups, MECE solution trees |
+| Question taxonomy | Ensure coverage | Behavioral vs execution vs strategy vs system design vs follow-up diagnostics |
+| Scoring rubric | Tie signals to pass/fail | Evidence weightings, seniority calibration bands |
+
+We should explicitly tag every generated question, hint, and rubric entry with these layers so downstream consumers understand **why** a prompt matters.
+
+### Proposed End-to-End Research Pipeline
+1. **Stage 0 – Opportunity Framing**
+   - Inputs: search intent, company/role hypotheses, hiring bar notes.
+   - Output: Investigation charter outlining which competencies need the deepest probes and what “great” looks like.
+
+2. **Stage 1 – Signal Intake**
+   - Concurrent collectors (existing Edge Functions) + new sources:
+     - Candidate report crawler (actual interview experiences, success/failure stories).
+     - Debrief annotator (structures interviewer retros).
+     - Competency calibrator (maps JD → evaluation lattice).
+   - Normalize every artifact into a `Signal` schema (`type`, `source`, `seniority`, `confidence`, `raw_snippet`).
+
+3. **Stage 2 – Domain Mapping**
+   - Run an “Insight Router” that tags each signal with frameworks above (e.g., `Competency: System Design`, `Heuristic: Latency-first`, `Narrative: STAR`).
+   - Build a `Competency × Depth × Evidence` matrix highlighting gaps between role expectations and candidate profile.
+
+4. **Stage 3 – Question Design Matrix**
+   - For each competency row, synthesize a stack of prompts:
+     1. **Anchor question** (real question verbatim).
+     2. **Probe ladder** (follow-ups: clarify context → technical deep dive → trade-off check → results quantification).
+     3. **Stress variants** (what-if scenario, failure recovery, escalation).
+     4. **Scoring rubric** (what outstanding/average/weak answers look like).
+   - Guarantee coverage across stages: phone screen, technical loop, cross-functional, HM/Bar Raiser.
+
+5. **Stage 4 – Interviewer & Candidate Assets**
+   - Interviewer view: loop map, intent per stage, red-flag checklist, calibration anchors, suggested “listen for” signals.
+   - Candidate view: rehearsal plan per stage, recommended STAR stories tied to each competency, self-diagnostic questions, practice drills.
+   - Inline references to real anecdotes so guidance feels grounded.
+
+6. **Stage 5 – Feedback Assimilation**
+   - After each user session, capture which questions felt most realistic or surprising.
+   - Log interview outcomes (success/fail, stage reached) when users report back.
+   - Feed deltas into the Signal Intake layer to keep the pipeline living.
+
+## Priority Role Verticals & Verbal-First Focus
+
+We’re leaning into industries where compensation is high, interview rubrics are well defined, and the ROI of better verbal prep is obvious. That means optimizing for:
+
+1. **Tech Product & Business Leadership (PM, TPM, BizOps, Strategy)**
+   - Frameworks: Product sense ladders, execution scorecards, cross-org leadership models, financial modeling for PMs.
+   - Data sources: Product tear-downs, customer roadmap leaks, earnings transcripts, internal cultural narratives, leadership principle documentation.
+   - Signature expectations: ambiguous problem solving, stakeholder alignment, metrics fluency, ability to connect product bets to ARR/MAU impact.
+
+2. **Investment Banking / PE / Corp Dev**
+   - Frameworks: Deal lifecycle checklists, valuation heuristics, regulatory workflows, client management behaviors by seniority.
+   - Data sources: M&A filings, pitchbooks, league-table commentary, credit rating notes, macroeconomic speeches.
+   - Signature expectations: proactive ownership, quantified upside, cross-org coordination under pressure, flawless executive communication.
+
+3. **Management & Strategy Consulting**
+   - Frameworks: MECE case trees, profitability/decomposition patterns, transformation playbooks, partner-level client leadership checklists.
+   - Data sources: Consulting casebooks, thought-leadership POVs, procurement RFPs, alumni debriefs, change-management retros.
+   - Signature expectations: hypothesis-driven structure, executive presence, influence without authority, client-ready synthesis.
+
+### Pipeline Adjustments for These Verticals
+- **Taxonomy presets**: Pre-bake competency lattices per vertical (e.g., PM = Product Sense, Execution, Craft; IB = Deal Sourcing, Modeling, Client Leadership; Consulting = Case Structuring, Client Leadership, Implementation).
+- **Scenario archetype libraries**: Curate reusable prompts like “post-merger integration,” “zero-to-one platform launch,” “cost takeout program,” each tagged with level expectations.
+- **Expectation lenses**: Encode vertical-specific “must show” signals (financial impact, cross-org leadership, verbal polish). Generation references these lenses automatically so questions and rubrics stress the right behaviors.
+- **Source weighting**: Run Tavily + scraper collectors with vertical-specific domains (e.g., SEC/EDGAR for finance, Gartner/Stratechery for tech, consulting alumni blogs) and store provenance to justify recommendations.
+
+### Verbal-First, On-the-Go Experience
+- **No coding surfaces**: All content is geared toward live verbal answers, whiteboard strategy, mental math, and narrative drills rather than IDE-style practice.
+- **Prioritized drills**: Default view highlights the top 3–5 competency gaps for the user’s goal/level; deeper coverage is available but optional.
+- **Paired assets**: Every interviewer intent (question, follow-up ladder, scoring rubric) has a mirrored candidate coaching artifact so users rehearse exactly what interviewers probe.
+- **Micro-practice friendly**: Package prompts into audio snippets, flashcards, and timed voice practice to support commute or “between meetings” sessions.
+
+### Implementation Notes
+- **Data model**: Introduce `interview_signals`, `framework_tags`, and `question_stacks` tables to persist rich metadata instead of raw blobs.
+- **Prompting**: Build a “framework preamble” that injects competency matrices and follow-up ladders before synthesis; keep question variants grouped by intent.
+- **Evaluation tooling**: Add validator scripts/tests to ensure every generated question references at least one `Signal` and carries ≥2 framework tags.
+- **User experience**: Surface assets in-dashboard with toggles for interviewer vs interviewee prep, and highlight provenance (“rooted in 37 Google L4 TPM interview debriefs from 2024–2025”).
+
+Following this blueprint ensures we stop at nothing less than bar-raiser-quality research: grounded in reality, organized by proven frameworks, and continually enriched by new interview data. This is how we deliver the “best possible content” the product aspires to provide.
