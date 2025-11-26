@@ -134,6 +134,15 @@ All documentation now lives in a single navigation surface so you don't need to 
 - ✅ Increase practice nav dots to 12 px and add `pb-24` (plus safe-area inset) under sticky nav.
 - Add redirect-aware banner on `/auth` (“Sign in to resume Practice”).
 
+### 🧪 Testing Backlog
+High-level testing initiatives we still need to land before reopening sign-ups. Detailed acceptance notes live in [`docs/TESTING_BACKLOG.md`](./docs/TESTING_BACKLOG.md).
+
+1. **[P0] Search artifact persistence:** regression nets around `search_artifacts` upsert flows, `cv_job_comparisons`, and comparison data surfaced through `searchService`.
+2. **[P0] Progress & stall UI:** component coverage for `ProgressDialog`, `useSearchProgress`, and stalled-job retry/telemetry.
+3. **[P0] Search creation flow:** integration-level tests for `Home` form validation, `createSearchRecord`/`startProcessing`, and long-running polling UX.
+4. **[P1] Practice session pipeline:** sampler math, favorites-only filters, stage selection, and practice session/answer persistence.
+5. **[P2] Tavily analytics math:** unit coverage for credit totals, success rates, and company-frequency aggregation in `tavilyAnalyticsService`.
+
 ### 📚 Historical Context
 - Completed epics (seniority personalization, sampler, favorites, swipe gestures) now live inside the product; see `docs/IMPLEMENTATION_CHANGES.md` for deep dives.
 - Audio transcription, timer presets, analytics dashboards stay parked until the above priorities land.
