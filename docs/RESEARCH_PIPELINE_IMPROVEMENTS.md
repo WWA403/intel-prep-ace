@@ -315,7 +315,113 @@ We’re leaning into industries where compensation is high, interview rubrics ar
 - **Paired assets**: Every interviewer intent (question, follow-up ladder, scoring rubric) has a mirrored candidate coaching artifact so users rehearse exactly what interviewers probe.
 - **Micro-practice friendly**: Package prompts into audio snippets, flashcards, and timed voice practice to support commute or “between meetings” sessions.
 
-### Implementation Notes
+## Supabase Schema Audit (Nov 26 2025)
+
+Pulled the latest schema directly from Supabase (`public` schema via `list_tables`) to cross-check reality vs. the blueprint above. Key observations:
+
+### Snapshot Highlights
+- Core workflow tables: `searches`, `search_artifacts`, `interview_stages`, `interview_questions`, `practice_sessions`, `practice_answers`.
+- Source ingestion: `scraped_urls`, `interview_experiences`, `resumes`.
+- Telemetry/logging: `function_executions`, `openai_calls`, `tavily_searches`, `url_deduplication_metrics`.
+
+### Redundancy & Legacy Pain Points
+1. **`searches`**  
+   - Contains both `search_status` and `status` with identical enums plus duplicative progress fields (`progress_step`, `progress_percentage`, `started_at`, `completed_at`).  
+   - Lacks columns for target vertical, competency focus, or prioritization metadata required by the new taxonomy.
+
+2. **`search_artifacts`**  
+   - Stores entire synthesis outputs (`interview_stages`, `interview_questions_data`, `preparation_guidance`) as JSON blobs, duplicating content already normalized in `interview_stages` and `interview_questions`.  
+   - Single-row-per-search design makes partial updates brittle and risks drift between JSON blobs and normalized tables.
+
+3. **`interview_questions` / `interview_stages`**  
+   - Rich free-text columns (`company_context`, `rationale`, arrays of follow-ups) but **no structured taxonomy columns** (vertical, competency, sub-skill, scenario archetype, expectation lenses, seniority band).  
+   - `stage_id` + `search_id` linkage is solid, yet there is no bridge to signal provenance or scoring rubrics.
+
+4. **`interview_experiences`**  
+   - Captures candidate reports but remains unstructured (arrays of `questions_asked`, text blobs) and is not linked back to `scraped_urls` or any normalized `signal` entity. We cannot reason about confidence, framework tags, or reuse metrics.
+
+5. **`scraped_urls`**  
+   - Acts as a monolithic dumping ground (raw HTML, summaries, extracted arrays) without `search_id` FK or signal tagging. Platform-specific metadata lives inside JSONB, making dedupe/attribution difficult.
+
+6. **Practice workflow (`practice_sessions`, `practice_answers`)**  
+   - Missing scoring/evaluation columns, transcript metadata, or feedback loops needed for Stage 5 assimilation. Cannot yet log which drills map to which competency gaps.
+
+7. **Logging tables** (`function_executions`, `openai_calls`, `tavily_searches`)  
+   - Healthy coverage, but we should index on `search_id`/`user_id` for faster investigations and join them to forthcoming `signal` lineage.
+
+### Missing Core Entities vs. Target Architecture
+- **`interview_signals`**: canonical store for every insight/snippet with columns like `signal_type`, `source_table_id`, `competency_tag`, `seniority`, `confidence_score`.
+- **`framework_tags` / `expectation_lenses`**: lookup tables to encode BAR Raiser principles, financial impact requirements, etc., so they can be referenced by questions, stages, and guidance.
+- **`question_stacks` & `question_variants`**: grouping construct to hold anchor question + probe ladder + stress variants + rubrics.
+- **`scenario_archetypes`**: reusable cases (post-merger integration, zero-to-one launch, etc.) tied to vertical/seniority.
+- **`user_feedback_events`**: to capture per-question usefulness, realism, and post-interview outcomes for the feedback loop.
+- **`source_provenance` bridge**: linking `scraped_urls`, `interview_experiences`, and future expert uploads to signals/questions.
+
+### Recommended Restructure Steps
+1. **Normalize statuses & progress**: collapse `search_status`/`status` into one enum, move progress tracking into its own table (`search_progress_events`) so searches stay slim.
+2. **Replace `search_artifacts` JSON blobs** with relational tables (`interview_signals`, `question_stacks`, `preparation_guidance_sections`) and keep JSON only for immutable snapshots.
+3. **Augment `interview_questions`** with taxonomy columns (`vertical`, `role_family`, `competency`, `sub_skill`, `scenario_archetype_id`, `expectation_lens_id`, `target_seniority`). Add FK to `question_stacks`.
+4. **Link ingestion sources**: add `scraped_url_id` FK to `interview_experiences`; introduce `signal_sources` table mapping each signal to Tavily call, scrape method, trust score.
+5. **Practice telemetry**: extend `practice_sessions`/`practice_answers` with `competency_id`, `rubric_score`, `feedback_notes`, and optionally audio-transcription metadata for future coaching.
+6. **Create feedback & outcome logging**: new `user_outcomes` table capturing real interview results, mapped back to searches and question stacks for reinforcement learning.
+
+These schema changes align storage with the richer taxonomy/framework strategy while reducing JSON blob drift and paving the way for provenance-aware, priority-ranked question generation.
+
+## Schema Change Prioritization & Risk Assessment
+
+To ensure we only touch what truly matters and avoid breaking production, every change was re-audited and categorized:
+
+| Priority | Item | Business Justification | Best-Practice Guardrails |
+| --- | --- | --- | --- |
+| **Must** | Normalize `searches` progress tracking | Conflicting status columns already cause UI drift; unifying prevents race conditions as we add more stages. | Create additive `search_progress_events`, dual-write, cut over only after parity dashboards stay green. |
+| **Must** | Replace `search_artifacts` blobs with relational tables | Without normalized data we cannot attach taxonomy/provenance; blobs frequently desync from actual questions. | Add new tables (`interview_signals`, `question_stacks`, etc.) beside existing blobs, backfill, then read-switch via feature flag. |
+| **Must** | Add taxonomy columns & `question_stacks` | Required to deliver prioritized PM/IB/Consulting drills; current schema can’t express vertical or expectation lenses. | Columns start nullable; existing queries unaffected until we backfill. |
+| **Must** | `interview_signals` + `signal_sources` bridge | Canonical provenance store needed for regulation-grade traceability and dedupe. | Purely additive; ingestion functions dual-write before any reads depend on it. |
+| **Nice** | `scenario_archetypes` lookup | Helps reuse cases but not mandatory for first release. | Defer until Must-haves stable. |
+| **Nice** | Practice telemetry columns | Useful for feedback loop yet can wait; does not block research pipeline. | Add once question taxonomy is shipping. |
+| **Nice** | `user_outcomes` logging | Great for RLHF-style improvements, but optional for initial MVP. | Schedule after telemetry upgrade. |
+
+This prioritization keeps scope surgical: only four schema changes are required to unblock the business goals, and each follows additive-first, opt-in rollout patterns.
+
+## Safe Migration Plan & Detailed Design
+
+### Phase 0 – Additive Foundations (Zero Breaking Changes)
+1. **Create new tables**  
+   - `interview_signals (id, source_type, source_id, signal_type, vertical, role_family, competency, sub_skill, seniority, confidence_score, content JSONB, created_at, updated_at)`  
+   - `question_stacks (id, search_id, signal_id, vertical, role_family, competency, sub_skill, expectation_lens_id, target_seniority, anchor_question, probe_ladder JSONB, stress_variants JSONB, scoring_rubric JSONB, created_at, updated_at)`  
+   - `signal_sources (id, signal_id, scraped_url_id?, interview_experience_id?, tavily_search_id?, openai_call_id?, confidence_adjustment, notes)`  
+   - `search_progress_events (id, search_id, step, status, progress_pct, metadata JSONB, created_at)`
+2. **Add nullable columns** to `interview_questions`: `vertical`, `role_family`, `competency`, `sub_skill`, `scenario_archetype_id (FK nullable)`, `expectation_lens_id (FK nullable)`, `target_seniority`, `question_stack_id (FK nullable)`, `primary_signal_id (FK nullable)`.
+3. **Backfill scripts**  
+   - Parse existing `search_artifacts.interview_questions_data` to populate `question_stacks` + new question metadata.  
+   - Convert `company_research_raw` insights into `interview_signals`.  
+   - Record provenance via `signal_sources`.
+4. **Dual-write rollout**  
+   - Edge Functions write to both legacy blobs and new tables (behind feature flag).  
+   - Add automated tests ensuring new writes succeed even if legacy code path fails (fail-fast to prevent partial migrations).
+
+### Phase 1 – Read Path Cutover
+1. **Service updates**: Synthesis functions consume `interview_signals` + taxonomy columns for prompts; frontend reads from `question_stacks` but falls back to blob if metadata missing.  
+2. **Monitoring**: Build Grafana/SQL dashboards comparing counts per search between blob vs normalized tables; alert on mismatches.  
+3. **Shadow traffic**: Enable new read path for internal users first, collect qualitative feedback.
+
+### Phase 2 – Legacy Retirement
+1. **Freeze writes** to `search_artifacts` JSON columns after ≥2 weeks of zero mismatches.  
+2. **Remove redundant columns** (`searches.status`, `progress_percentage`, etc.) once UI/API fully rely on `search_progress_events`.  
+3. **Tighten constraints**: make taxonomy columns NOT NULL for newly generated data; warn if ingestion attempts to skip them.
+
+### Additional Table Sketches (for deferred Nice-to-Haves)
+- `scenario_archetypes (id, name, vertical, description, default_expectation_lens_id, created_at, updated_at)`  
+- `user_feedback_events (id, user_id, question_id, feedback_type, rating, notes, created_at)`  
+- `user_outcomes (id, user_id, search_id, role, company, interview_stage_reached, outcome, notes, created_at)`
+
+Design principles applied throughout:
+- **Additive-first migrations** to avoid downtime.  
+- **Nullable-to-required progression** (populate data before enforcing constraints).  
+- **Dual-write + shadow-read** to ensure parity before deletions.  
+- **Provenance-by-default** so every downstream artifact can cite origin (critical for trust and quality audits).
+
+## Implementation Notes (Next Steps)
 - **Data model**: Introduce `interview_signals`, `framework_tags`, and `question_stacks` tables to persist rich metadata instead of raw blobs.
 - **Prompting**: Build a “framework preamble” that injects competency matrices and follow-up ladders before synthesis; keep question variants grouped by intent.
 - **Evaluation tooling**: Add validator scripts/tests to ensure every generated question references at least one `Signal` and carries ≥2 framework tags.
