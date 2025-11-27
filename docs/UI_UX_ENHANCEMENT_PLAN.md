@@ -4,6 +4,17 @@
 **Prepared by:** AI Assistant  
 **Scope:** All UI/UX feedback to-date for the Hireo interview preparation tool.
 
+## Latest Gap Review — November 27, 2025
+
+| # | Theme | Gap & Evidence | Impact | Fast Fix |
+| --- | --- | --- | --- | --- |
+| 1 | Guest onboarding | The home form stays fully interactive for logged-out users and only surfaces the “Please sign in” error inside `handleSubmit` (`src/pages/Home.tsx`, lines 88-101), while navigation is hidden whenever `!user` (`Home.tsx`, line 282) and the auth page lacks any persistent nav. | Candidates type long briefs only to be blocked at submit and cannot reach docs/support once redirected. | Gate the form behind a CTA card for guests, reuse the `Navigation` bar on `/` and `/auth` with simplified links, and show context copy (“Sign in to continue to Practice”). |
+| 2 | File upload messaging | Both the landing form and profile editor expose “Upload PDF” buttons even though `handleFileUpload` just logs a TODO (`Home.tsx`, lines 265-271 & 420-444) and `Profile.tsx` throws an error telling users the feature isn’t ready (lines 163-170). | Users believe CV uploads persist server-side; trust drops when nothing happens. | Disable the buttons until processing ships, label them “Coming soon”, and add a one-line privacy note pointing users to the textarea fallback. |
+| 3 | Auth flow clarity | Sign-in and sign-up tabs share the same `formData` state (`src/pages/Auth.tsx`, lines 16-24), so switching tabs preserves passwords; there’s no “Forgot password” link or banner explaining why a user was redirected. | UX feels brittle, and users lack recovery paths when they mistype credentials or follow a protected deep link. | Maintain separate state per tab, add `Forgot password` + `Resend verification` links, and surface the `location.state.from` route (“Sign in to resume Practice”). |
+| 4 | Research history affordances | The navigation component hides its history sheet unless `showHistory` is true, but every page instantiates `<Navigation>` with the default `false` (e.g., `Dashboard.tsx` line 207, `Practice.tsx` line 966, `Profile.tsx` line 279). | There is no accessible way to reopen previous research runs or understand the “Active search” selector, so users recreate work. | Always render the History trigger once a user has searches, and add helper copy/empty states that explain why the selector might be blank. |
+| 5 | Dashboard credibility | “Interview Process Overview” cards display hard-coded placeholders instead of deriving values from `searchData` (`src/pages/Dashboard.tsx`, lines 349-378). | Static “3–4 weeks / Technical + Behavioral” blurs the line between actual intelligence and filler, reducing perceived value. | Show only metrics returned from Supabase (stage count, detected regions, etc.) and hide tiles without real data. |
+| 6 | Profile data management | The “Delete CV” action only clears local state (`Profile.tsx`, lines 213-223) even though the page claims success; a refresh immediately reloads the server-stored resume (`Profile.tsx`, lines 128-151). | Users think their resume was removed when it wasn’t, creating privacy and compliance risk. | Wire the button to a real Supabase delete endpoint (or remove it until ready) and adjust copy to reflect the actual behavior. |
+
 ---
 
 ## Inputs & Approach
@@ -69,6 +80,16 @@ Themes were clustered, conflicting recommendations were resolved using standard 
   _Action:_ Pair each error with a clear CTA (“Sign in”), describe remediation steps, and log for support when retries fail.
 - **Saved answers & notes uncertainty:** Users cannot tell when answers or session notes persist or how to edit them.  
   _Action:_ Provide inline success states (“Saved · 2:14 PM”), allow edits until session completion, and autosave notes with debounce.
+
+### 7. Motion & Micro-interactions
+- **Hard-cut page transitions make the experience feel static:** Route changes simply swap DOM nodes with no easing.  
+  _Action:_ Wrap router views in a shared fade/slide transition (CSS `transition-all` or a lightweight `framer-motion` wrapper) so Home → Dashboard → Practice flows feel cohesive.
+- **Primary CTAs lack affordance:** Buttons such as “Start Research”, “Start Practice”, and “Save Answer” stay flat on hover/tap.  
+  _Action:_ Add a 150–200 ms scale + shadow shift to these buttons (Tailwind `transition`, `hover:scale-105`, `active:scale-95`) to telegraph interactivity on touch devices.
+- **Loading states pop in abruptly:** Cards appear fully rendered once data arrives, which breaks perceived performance.  
+  _Action:_ Standardize on a shimmer skeleton for dashboard cards, practice questions, and profile panels using Tailwind keyframes so every major surface has a graceful placeholder.
+- **Dialogs feel disconnected from the app shell:** The progress dialog and sheets simply appear/disappear.  
+  _Action:_ Apply a `scale-95 → scale-100` entrance with backdrop fade (CSS animation or Tailwind `motion-safe` utilities) and pair it with the z-index/scroll-lock plan outlined below.
 
 ---
 
