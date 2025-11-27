@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,6 +33,57 @@ const Home = () => {
   const [showProgressDialog, setShowProgressDialog] = useState(false);
   const [currentSearchId, setCurrentSearchId] = useState<string | null>(null);
   const [searchStatus, setSearchStatus] = useState<'pending' | 'processing' | 'completed' | 'failed'>('pending');
+  const [profileResume, setProfileResume] = useState<{ content: string; created_at?: string } | null>(null);
+  const [isLoadingProfileResume, setIsLoadingProfileResume] = useState(false);
+  const [isUsingProfileResume, setIsUsingProfileResume] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadProfileResume = async () => {
+      if (!user) {
+        setProfileResume(null);
+        setIsUsingProfileResume(false);
+        return;
+      }
+
+      setIsLoadingProfileResume(true);
+      try {
+        const result = await searchService.getResume(user.id);
+        if (!isMounted) return;
+
+        if (result.success && result.resume?.content) {
+          setProfileResume({
+            content: result.resume.content,
+            created_at: result.resume.created_at
+          });
+
+          setFormData(prev => {
+            if (prev.cv.trim().length > 0) return prev;
+            return { ...prev, cv: result.resume?.content || "" };
+          });
+          setIsUsingProfileResume(true);
+        } else {
+          setProfileResume(null);
+        }
+      } catch (resumeError) {
+        console.error("Error loading saved resume:", resumeError);
+        if (isMounted) {
+          setProfileResume(null);
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoadingProfileResume(false);
+        }
+      }
+    };
+
+    loadProfileResume();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [user, setFormData]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -219,6 +270,12 @@ const Home = () => {
     }
   };
 
+  const handleRestoreProfileResume = () => {
+    if (!profileResume?.content) return;
+    setFormData(prev => ({ ...prev, cv: profileResume.content }));
+    setIsUsingProfileResume(true);
+  };
+
   return (
     <div className="min-h-screen bg-background">
       {/* Always show Navigation for logged-in users */}
@@ -322,6 +379,44 @@ const Home = () => {
 
               <div className="space-y-4">
                 <Label>CV / Resume</Label>
+                {isLoadingProfileResume && (
+                  <p className="text-xs text-muted-foreground">Loading your saved resume...</p>
+                )}
+                {!isLoadingProfileResume && profileResume && (
+                  <div className="flex flex-col gap-2 text-xs text-muted-foreground">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span>
+                        {isUsingProfileResume
+                          ? "Using resume saved on your Profile."
+                          : "You have a saved resume on your Profile. Edit it there to update defaults."}
+                      </span>
+                      {profileResume.created_at && (
+                        <span className="text-[11px] text-muted-foreground/80">
+                          Last updated {new Date(profileResume.created_at).toLocaleDateString()}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => navigate("/profile")}
+                      >
+                        Manage Profile Resume
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={handleRestoreProfileResume}
+                        disabled={isUsingProfileResume}
+                      >
+                        Restore Saved CV
+                      </Button>
+                    </div>
+                  </div>
+                )}
                 <div className="border-2 border-dashed border-border rounded-lg p-6">
                   <div className="flex flex-col items-center justify-center space-y-4">
                     <Upload className="h-8 w-8 text-muted-foreground" />
@@ -352,7 +447,15 @@ const Home = () => {
                 <Textarea
                   placeholder="Or paste your CV text here..."
                   value={formData.cv}
-                  onChange={(e) => setFormData(prev => ({ ...prev, cv: e.target.value }))}
+                  onChange={(e) => {
+                    const updatedValue = e.target.value;
+                    setFormData(prev => ({ ...prev, cv: updatedValue }));
+                    if (profileResume?.content) {
+                      setIsUsingProfileResume(updatedValue.trim() === profileResume.content.trim());
+                    } else {
+                      setIsUsingProfileResume(false);
+                    }
+                  }}
                   rows={6}
                   className="resize-none"
                 />

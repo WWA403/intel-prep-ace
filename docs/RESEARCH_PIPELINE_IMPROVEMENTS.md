@@ -164,6 +164,26 @@ The research pipeline was improved to address **shallow context integration** an
 
 **Impact**: Higher quality, more relevant questions that are deeply tailored to the candidate and role.
 
+### 7. Persistent Resume-to-Search Handshake ✅
+
+**Front-End Touchpoints**
+- `src/pages/Profile.tsx` — users paste/upload their canonical CV, which is parsed and stored once.
+- `src/pages/Home.tsx` — automatically pulls the most recent stored CV when the search form loads (with UI affordances to override or jump back to the Profile editor). Users no longer need to paste their resume for every search run.
+
+**Back-End Automations**
+- `supabase/migrations/20251127000010_service_role_resumes.sql` now defines a trigger (`copy_latest_resume_on_search_insert`) that snapshots the user’s latest profile resume onto every new `searches` row (using the server-side service role so Edge Functions remain stateless).
+- `supabase/functions/interview-research/index.ts` loads resume content in this order:
+  1. Search-scoped snapshot (guaranteed after the trigger).
+  2. User-level resume fallback (for legacy rows).
+  3. Raw CV supplied in the request body (only when explicitly provided).
+- When resume content is found, the function still stores a search-specific copy to keep artifacts immutable.
+
+**Reliability & Tests**
+- `tests/unit/test_edge_functions/test_02_interview_research.ts` Test 2.3 now seeds a profile resume, creates a search, confirms the snapshot exists, and only then triggers the long-running research function—preventing flakiness.
+- The entire test suite (`deno test --allow-all tests/unit/test_edge_functions/test_02_interview_research.ts`) passes against the live Supabase project, proving the end-to-end flow works with real policies, triggers, and Edge Functions.
+
+**Impact**: Users maintain their resume in one place, searches always have a consistent CV attached, and Edge Functions receive deterministic context without extra plumbing or brittle client payloads.
+
 ## Configuration
 
 ### Setting the Model in Supabase

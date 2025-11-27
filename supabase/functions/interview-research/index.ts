@@ -35,6 +35,209 @@ interface UnifiedSynthesisOutput {
   synthesis_metadata: any;
 }
 
+const STOPWORDS = new Set([
+  "and", "the", "for", "with", "from", "that", "this", "will", "have", "ability",
+  "experience", "skills", "including", "across", "team", "teams", "work", "working",
+  "lead", "leading", "drive", "driving", "build", "building", "design", "designing",
+  "manage", "managing", "develop", "development", "years", "year", "plus", "strong",
+  "deep", "excellent", "solid", "good", "great", "track", "record", "deliver", "delivery"
+]);
+
+function tokenizeRequirementEntry(entry: string): string[] {
+  return entry
+    .split(/[\n,;:/•\-]| and | or /i)
+    .map(token => token.replace(/[^a-z0-9+#.\s]/gi, "").trim().toLowerCase())
+    .filter(token => token.length >= 3 && !STOPWORDS.has(token));
+}
+
+function extractJobKeywords(jobRequirements: any): string[] {
+  if (!jobRequirements) return [];
+
+  const candidateEntries: string[] = [];
+  const fields = ['technical_skills', 'soft_skills', 'responsibilities', 'qualifications', 'nice_to_have'];
+
+  fields.forEach((field) => {
+    const values = jobRequirements[field];
+    if (Array.isArray(values)) {
+      values.forEach((value) => {
+        if (typeof value === 'string') {
+          candidateEntries.push(value);
+        }
+      });
+    }
+  });
+
+  const keywordSet = new Set<string>();
+  candidateEntries.forEach(entry => {
+    tokenizeRequirementEntry(entry).forEach(token => {
+      if (token && !keywordSet.has(token)) {
+        keywordSet.add(token);
+      }
+    });
+  });
+
+  return Array.from(keywordSet).slice(0, 120);
+}
+
+function scoreExperienceRelevance(experience: any, keywords: string[]) {
+  if (!experience) {
+    return { score: 0, matched: [] as string[] };
+  }
+
+  const experienceText = [
+    experience.role,
+    experience.company,
+    experience.duration,
+    ...(experience.achievements || [])
+  ].filter(Boolean).join(' ').toLowerCase();
+
+  const matched = new Set<string>();
+  keywords.forEach(keyword => {
+    if (keyword && experienceText.includes(keyword)) {
+      matched.add(keyword);
+    }
+  });
+
+  const achievementBoost = Math.min((experience.achievements?.length || 0) * 0.3, 2);
+  const score = matched.size + achievementBoost;
+
+  return {
+    score,
+    matched: Array.from(matched)
+  };
+}
+
+function buildExperienceRelevanceSummary(jobRequirements: any, analysisData: any): string | null {
+  if (!jobRequirements || !analysisData?.experience || analysisData.experience.length === 0) {
+    return null;
+  }
+
+  const keywords = extractJobKeywords(jobRequirements);
+  if (!keywords.length) return null;
+
+  const scoredExperiences = analysisData.experience.map((exp: any) => {
+    const { score, matched } = scoreExperienceRelevance(exp, keywords);
+    return {
+      ...exp,
+      relevanceScore: score,
+      matchedKeywords: matched
+    };
+  }).sort((a: any, b: any) => b.relevanceScore - a.relevanceScore);
+
+  const highRelevance = scoredExperiences.filter((exp: any) => exp.relevanceScore >= 1).slice(0, 3);
+  const supporting = scoredExperiences.filter((exp: any) => exp.relevanceScore < 1).slice(0, 2);
+
+  if (!highRelevance.length && !supporting.length) return null;
+
+  let summary = `EXPERIENCE RELEVANCE MAP:\n`;
+
+  if (highRelevance.length) {
+    summary += `High-Relevance Experience Focus (aligns with job requirements):\n`;
+    highRelevance.forEach((exp: any, idx: number) => {
+      summary += `${idx + 1}. ${exp.role} at ${exp.company}`;
+      if (exp.matchedKeywords.length) {
+        summary += ` — matches: ${exp.matchedKeywords.slice(0, 5).join(', ')}`;
+      }
+      summary += ` (score ${exp.relevanceScore.toFixed(1)})\n`;
+    });
+    summary += `\n`;
+  }
+
+  if (supporting.length) {
+    summary += `Supporting Experience (use sparingly for variety):\n`;
+    supporting.forEach((exp: any, idx: number) => {
+      summary += `${idx + 1}. ${exp.role} at ${exp.company}\n`;
+    });
+    summary += `\n`;
+  }
+
+  summary += `Prioritize high-relevance experiences when tailoring questions; use supporting items only when additional diversity is needed.\n\n`;
+  return summary;
+}
+
+async function fetchStoredResumeContent(supabase: any, userId: string, searchId?: string) {
+  try {
+    const columns = 'id, content, created_at';
+
+    if (searchId) {
+      const { data, error } = await supabase
+        .from('resumes')
+        .select(columns)
+        .eq('search_id', searchId)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (error) {
+        console.warn("⚠️ Failed to load search-specific resume:", error.message);
+      } else if (data && data.length > 0) {
+        return data[0];
+      }
+    }
+
+    const { data, error } = await supabase
+      .from('resumes')
+      .select(columns)
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    if (error) {
+      console.warn("⚠️ Failed to load stored resume:", error.message);
+      return null;
+    }
+
+    if (!data || data.length === 0) {
+      return null;
+    }
+
+    return data[0];
+  } catch (error) {
+    console.error("❌ Error fetching stored resume:", error);
+    return null;
+  }
+}
+
+async function ensureResumeSnapshotForSearch(
+  supabase: any,
+  searchId: string,
+  userId: string,
+  content: string
+) {
+  try {
+    const { data: existing } = await supabase
+      .from('resumes')
+      .select('id')
+      .eq('search_id', searchId)
+      .limit(1);
+
+    if (existing && existing.length > 0) {
+      return existing[0].id;
+    }
+
+    const { data, error } = await supabase
+      .from('resumes')
+      .insert({
+        user_id: userId,
+        search_id: searchId,
+        content,
+        parsed_data: null
+      })
+      .select('id')
+      .single();
+
+    if (error) {
+      console.warn("⚠️ Failed to snapshot resume for search:", error.message);
+      return null;
+    }
+
+    console.log("📄 Snapshot resume created for search");
+    return data?.id || null;
+  } catch (error) {
+    console.warn("⚠️ Error creating resume snapshot for search:", error);
+    return null;
+  }
+}
+
 // ============================================================
 // PHASE 1: Data Gathering (concurrent calls to microservices)
 // ============================================================
@@ -606,6 +809,11 @@ function buildSynthesisPrompt(
         prompt += `  Graduation Year: ${analysisData.education.graduation_year}\n`;
       }
       prompt += `\n`;
+    }
+
+    const relevanceSummary = buildExperienceRelevanceSummary(jobRequirements, analysisData);
+    if (relevanceSummary) {
+      prompt += relevanceSummary;
     }
     
     prompt += `CRITICAL: Generate questions that reference specific experiences, projects, and achievements from this candidate's background.\n\n`;
@@ -1323,6 +1531,41 @@ serve(async (req: Request) => {
 
     const openaiApiKey = Deno.env.get("OPENAI_API_KEY") || "";
 
+    let cvText = (requestData.cv || "").trim();
+    let cvSource: 'payload' | 'profile' | 'none' = 'none';
+
+    if (cvText) {
+      cvSource = 'payload';
+    } else {
+      const storedResume = await fetchStoredResumeContent(supabase, userId, searchId);
+      console.log("Stored resume lookup result", {
+        found: !!storedResume,
+        length: storedResume?.content?.length || 0
+      });
+      if (storedResume?.content) {
+        cvText = storedResume.content;
+        cvSource = 'profile';
+        console.log("📄 Using stored profile resume for CV analysis");
+        logger?.log("CV_SOURCE", "PROFILE", {
+          resumeCreatedAt: storedResume.created_at
+        });
+      } else {
+        console.log("⚠️ No CV provided and no stored profile resume found. Proceeding without CV context.");
+      }
+    }
+
+    console.log(`CV source resolved: ${cvSource}`, { hasCvText: !!cvText, length: cvText.length });
+
+    if (cvSource === 'payload') {
+      logger?.log("CV_SOURCE", "PAYLOAD");
+    } else if (cvSource === 'none') {
+      logger?.log("CV_SOURCE", "MISSING");
+    }
+
+    if (cvSource !== 'none' && cvText) {
+      await ensureResumeSnapshotForSearch(supabase, searchId, userId, cvText);
+    }
+
     // ============================================================
     // PHASE 1: Concurrent Data Gathering (20-30 seconds)
     // ============================================================
@@ -1334,7 +1577,7 @@ serve(async (req: Request) => {
     const [companyInsights, jobRequirements, cvAnalysis] = await Promise.allSettled([
       gatherCompanyData(requestData.company, requestData.role, requestData.country, searchId),
       gatherJobData(requestData.roleLinks || [], searchId, requestData.company, requestData.role),
-      gatherCVData(requestData.cv || "", userId)
+      gatherCVData(cvText, userId)
     ]).then(results => [
       results[0].status === 'fulfilled' ? results[0].value : null,
       results[1].status === 'fulfilled' ? results[1].value : null,

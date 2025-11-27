@@ -286,7 +286,99 @@ Experience: Led iOS team at TechCorp`;
 });
 
 Deno.test({
-  name: "Interview Research - Test 2.3: Verify status transition in DB",
+  name: "Interview Research - Test 2.3: Use stored profile resume when CV omitted",
+  sanitizeResources: false,
+  sanitizeOps: false,
+  async fn() {
+    const { client: supabase, userId } = await getAuthenticatedClient();
+    let searchId: string | null = null;
+    let profileResumeId: string | null = null;
+
+    try {
+      console.log("  📄 Seeding stored resume for user...");
+      const resumeContent = `Pat Doe
+Senior Solutions Architect
+Skills: AWS, Terraform, Distributed Systems
+Experience: Built multi-region platforms`;
+
+      const { data: storedResume, error: storedResumeError } = await supabase
+        .from("resumes")
+        .insert({
+          user_id: userId,
+          content: resumeContent
+        })
+        .select()
+        .single();
+
+      assertEquals(storedResumeError, null, "Profile resume insert should succeed");
+      profileResumeId = storedResume?.id ?? null;
+
+      searchId = await createTestSearch(supabase, userId, "ProfileResumeCo", "Solutions Architect");
+
+      console.log("  🔄 Waiting for automatic search resume snapshot...");
+      const resumeAttempts = 8;
+      const resumeDelay = 500;
+      let snapshot: any = null;
+      for (let attempt = 0; attempt < resumeAttempts; attempt++) {
+        const { data: snapshots } = await supabase
+          .from("resumes")
+          .select("id, search_id, content")
+          .eq("search_id", searchId)
+          .order("created_at", { ascending: false })
+          .limit(1);
+
+        if (snapshots && snapshots.length > 0) {
+          snapshot = snapshots[0];
+          break;
+        }
+
+        await new Promise(resolve => setTimeout(resolve, resumeDelay));
+      }
+
+      assertExists(snapshot, "Resume snapshot should be created for the search");
+      assertEquals(snapshot.content.includes("Pat Doe"), true, "Snapshot should reuse stored profile resume content");
+      console.log("  ✅ Resume snapshot created from stored profile resume");
+
+      console.log("  🚀 Triggering interview research without explicit CV...");
+      const functionUrl = `${supabaseUrl}/functions/v1/interview-research`;
+      const response = await fetch(functionUrl, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${supabaseKey}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          searchId,
+          userId,
+          company: "ProfileResumeCo",
+          role: "Solutions Architect",
+          country: "United States"
+        })
+      });
+      console.log("  📊 Response status:", response.status);
+
+    } finally {
+      if (profileResumeId) {
+        await supabase.from("resumes").delete().eq("id", profileResumeId);
+      }
+
+      if (searchId) {
+        console.log("  🧹 Cleaning up test data...");
+        await supabase.from("resumes").delete().eq("search_id", searchId);
+        await supabase.from("interview_questions").delete().eq("search_id", searchId);
+        await supabase.from("interview_stages").delete().eq("search_id", searchId);
+        await supabase.from("cv_job_comparisons").delete().eq("search_id", searchId);
+        await supabase.from("searches").delete().eq("id", searchId);
+        console.log("  ✅ Test data cleaned up");
+      }
+
+      await supabase.removeAllChannels();
+    }
+  }
+});
+
+Deno.test({
+  name: "Interview Research - Test 2.4: Verify status transition in DB",
   sanitizeResources: false,
   sanitizeOps: false,
   async fn() {
@@ -374,7 +466,7 @@ Deno.test({
 });
 
 Deno.test({
-  name: "Interview Research - Test 2.4: Handle invalid search ID gracefully",
+  name: "Interview Research - Test 2.5: Handle invalid search ID gracefully",
   sanitizeResources: false,
   sanitizeOps: false,
   async fn() {
