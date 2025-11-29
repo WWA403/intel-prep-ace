@@ -65,6 +65,36 @@ Themes were clustered, conflicting recommendations were resolved using standard 
 - **Voice recording + guidance honesty:** UI implies saving audio and always exposes detailed rationale.  
   _Action:_ Label recording as “Local preview only” until upload works and collapse rationale/company context behind a “Show details” toggle. _(Shipped Nov 23, 2025)_
 
+#### 4.1 Current State & Pain Points Recap
+- **What already shipped:** Stepper-style setup presets, swipe guards, safe-area padding, nav dots, compact hint strip, and “local preview” messaging went live on Nov 23 and are stable.
+- **Remaining friction:** Users still mis-trigger swipes when scrolling long prompts, the sticky bottom nav obscures answer fields on smaller devices, hints feel noisy after the first question, and guidance around saving notes/voice is unclear.
+- **Impact radius:** High-volume practice users lose confidence when accidental navigation wipes answers; first-time users disengage because onboarding + gestures lack clear instructions.
+- **Ops considerations:** QA reported regressions whenever gesture thresholds changed; engineering flagged the practice stack as brittle because layout tweaks are scattered across cards, sheets, and the nav bar.
+
+#### 4.2 Experience Principles & Flow
+1. **Gesture safety first:** Any horizontal action should require intentional movement and respect vertical scroll context.  
+2. **Progressive disclosure:** Show only the inputs and helpers needed for the current step; advanced controls stay tucked behind accordions.  
+3. **Responsive guardrails:** All controls remain reachable inside device safe areas with ≥44px touch targets and consistent padding.  
+4. **Honest guidance:** Voice and hint copy must reflect actual capabilities (“Preview only”, “Hints improve with more context”).  
+5. **Single source of layout truth:** Shared primitives (QuestionFrame, BottomPracticeNav, HintBanner) own spacing so downstream screens stay maintainable.
+
+**Refreshed flow:**  
+`Setup presets → Context confirmation → Question cards w/ hint banner → Voice / notes helpers → Wrap-up summary + next steps`. Each phase communicates success/error states inline (no modal detours) and reuses the same progress pill + CTA stack.
+
+#### 4.3 Component-Level Enhancements
+- **Swipe + scroll logic:** Raise the horizontal swipe threshold from 35px to ~60px and cancel swipes when vertical delta > 12px inside the same gesture. Provide a subtle “Swipe to jump ahead” affordance that disappears after the first successful swipe to reduce noise.
+- **Hint banner behavior:** Replace inline hint overlays with a dismissible banner anchored at the top of the first card. Persist dismissal for the current session via local state or sessionStorage so returning users aren’t re-prompted mid-run.
+- **Question layout:** Encapsulate question content inside `QuestionFrame` with built-in `pb-24 md:pb-32` so the sticky nav never overlaps fields. Move dot navigation into `BottomPracticeNav`, enlarge dots to 12px with `focus-visible:ring`, and expose stage labels on hover/long-press for accessibility.
+- **Helper stack:** Consolidate voice recorder, note-taking, and reference material into a collapsible helper drawer beneath each card. The drawer defaults open on the first card only, reminding users that recordings are local previews and notes auto-save every 5s.
+- **Session wrap-up:** After the final question, show a summary card with ✔ Saved answers status, recommended next actions (“Retry stage 2”, “Share with mentor”), and a CTA to jump straight into research or dashboard review, keeping users inside the ecosystem.
+
+#### 4.4 Developer Implementation Notes
+- **Component reuse:** Build `QuestionFrame`, `BottomPracticeNav`, and `HintBanner` as standalone components under `components/practice/` with Storybook examples; import Tailwind presets via utility classes instead of bespoke CSS.
+- **Configuration & feature flags:** Gate the new helper drawer and swipe thresholds behind a `practice_v2` flag so rollout can be staged without branching the entire page.
+- **Testing matrix:** Snapshot + interaction tests covering iPhone SE, iPhone 14 Pro, Pixel 7, and desktop breakpoints. Unit-test swipe util to ensure vertical delta short-circuits horizontal actions.
+- **Telemetry hooks:** Fire analytics events (`practice_hint_dismissed`, `practice_swipe_blocked`, `practice_helper_toggle`) to validate that UX changes reduce accidental swipes and repeated hint dismissals.
+- **Documentation & handoff:** Update this doc plus `docs/TESTING.md` with the new matrix once the implementation lands; link component props in Storybook to keep design + dev in sync.
+
 ### 5. Accessibility & Responsiveness
 - **Keyboard, ARIA, and contrast gaps:** Icon-only buttons lack labels, focus states are subtle, and muted text may fail WCAG.  
   _Action:_ Add `aria-label`s, increase focus ring contrast, and audit `text-muted-foreground` against WCAG 2.1 AA (4.5:1).  

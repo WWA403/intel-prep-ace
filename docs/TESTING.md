@@ -8,6 +8,9 @@ Single reference for how we test intel-prep-ace: what already exists, how to run
 - Edge Functions stay in Deno under `tests/unit/test_edge_functions`.
 - Frontend code should use Vitest + React Testing Library (planned; add `vitest run` npm script when suites land).
 
+## Latest Run – November 29, 2025
+- `pnpm test` → **26 tests passed** in ~48s covering all edge-function suites plus the updated practice experience helpers.
+
 ## Suite Layout
 ```
 tests/
@@ -25,7 +28,7 @@ tests/
         └── test_08_complete_workflow.ts        📋 Planned
 ```
 
-**Current coverage:** 25 unit tests for the six Edge Functions, all passing. Integration slots are outlined below and should be implemented before major feature work ships.
+**Current coverage:** 26 automated tests (edge functions + practice helpers) and all are passing. Integration slots are outlined below and should be implemented before major feature work ships.
 
 ## Key Scenarios (Next Up)
 - **Test 07 – CV/Job comparison unit**: validate gap analysis structure, skill match %, fallback when CV or job data is missing, and database writes inside the `cv-job-comparison` edge function.

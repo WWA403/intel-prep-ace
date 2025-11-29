@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useSwipeable } from "react-swipeable";
 import Navigation from "@/components/Navigation";
@@ -36,9 +36,16 @@ import { searchService } from "@/services/searchService";
 import { sessionSampler } from "@/services/sessionSampler";
 import { useAuth } from "@/hooks/useAuth";
 import { SessionSummary } from "@/components/SessionSummary";
+import { QuestionFrame } from "@/components/practice/QuestionFrame";
+import { HintBanner } from "@/components/practice/HintBanner";
+import { BottomPracticeNav } from "@/components/practice/BottomPracticeNav";
+import { PracticeHelperDrawer } from "@/components/practice/PracticeHelperDrawer";
 
-const SWIPE_THRESHOLD_PX = 80;
-const VERTICAL_SCROLL_SUPPRESSION_DELTA = 18;
+const SWIPE_THRESHOLD_PX = 60;
+const VERTICAL_SCROLL_SUPPRESSION_DELTA = 12;
+const SWIPE_HINT_STORAGE_PREFIX = "practiceSwipeHintDismissed";
+const ANSWER_AUTOSAVE_PREFIX = "practiceAnswerAutosave";
+const AUTOSAVE_DELAY_MS = 5000;
 const PRACTICE_SETUP_STORAGE_KEY = "practiceSetupDefaults";
 
 const SETUP_STEPS = [
@@ -146,6 +153,10 @@ const Practice = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const searchId = searchParams.get('searchId');
   const urlStageIds = searchParams.get('stages')?.split(',') || [];
+  const swipeHintStorageKey = useMemo(
+    () => `${SWIPE_HINT_STORAGE_PREFIX}:${searchId ?? 'global'}`,
+    [searchId]
+  );
   
   const [questions, setQuestions] = useState<Question[]>([]);
   const [allStages, setAllStages] = useState<InterviewStage[]>([]);
@@ -186,9 +197,19 @@ const Practice = () => {
   const [setupStep, setSetupStep] = useState(0);
   const [selectedPreset, setSelectedPreset] = useState<string | null>(null);
   const [rememberDefaults, setRememberDefaults] = useState(true);
-  const hasDismissedSwipeHintRef = useRef(false);
-  const [shouldShowSwipeHint, setShouldShowSwipeHint] = useState(true);
+  const [shouldShowSwipeHint, setShouldShowSwipeHint] = useState(false);
   const [isVerticalScrollGuarded, setIsVerticalScrollGuarded] = useState(false);
+  const [autosaveState, setAutosaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const autosaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const hydratedAnswersRef = useRef<Set<string>>(new Set());
+
+  const getAutosaveKey = (questionId: string) =>
+    `${ANSWER_AUTOSAVE_PREFIX}:${questionId}`;
+
+  const clearAutosavedAnswer = (questionId: string) => {
+    if (typeof window === "undefined") return;
+    sessionStorage.removeItem(getAutosaveKey(questionId));
+  };
   
   // Voice recording states
   const [isRecording, setIsRecording] = useState(false);
@@ -557,18 +578,59 @@ const getInterviewerFocus = (
   }, [currentIndex]);
 
   useEffect(() => {
+    if (!currentQuestion) return;
+    setAutosaveState('idle');
+    if (typeof window === "undefined") return;
+    if (hydratedAnswersRef.current.has(currentQuestion.id)) return;
+    hydratedAnswersRef.current.add(currentQuestion.id);
+    const storedAnswer = sessionStorage.getItem(getAutosaveKey(currentQuestion.id));
+    if (!storedAnswer) return;
+    setAnswers(prev => {
+      if (prev.has(currentQuestion.id)) {
+        return prev;
+      }
+      const next = new Map(prev);
+      next.set(currentQuestion.id, storedAnswer);
+      return next;
+    });
+  }, [currentQuestion?.id]);
+
+  useEffect(() => {
+    if (!currentQuestion || sessionState !== 'inProgress') return;
+    if (autosaveTimeoutRef.current) {
+      clearTimeout(autosaveTimeoutRef.current);
+    }
+    setAutosaveState('saving');
+    autosaveTimeoutRef.current = setTimeout(() => {
+      if (typeof window !== "undefined") {
+        sessionStorage.setItem(getAutosaveKey(currentQuestion.id), currentAnswer);
+      }
+      setAutosaveState('saved');
+    }, AUTOSAVE_DELAY_MS);
+
+    return () => {
+      if (autosaveTimeoutRef.current) {
+        clearTimeout(autosaveTimeoutRef.current);
+        autosaveTimeoutRef.current = null;
+      }
+    };
+  }, [currentAnswer, currentQuestion?.id, sessionState]);
+
+  useEffect(() => {
     if (sessionState !== 'inProgress') {
       setShouldShowSwipeHint(false);
       return;
     }
 
-    if (currentIndex === 0 && !hasDismissedSwipeHintRef.current) {
-      setShouldShowSwipeHint(true);
-    } else if (currentIndex > 0 && !hasDismissedSwipeHintRef.current) {
-      hasDismissedSwipeHintRef.current = true;
+    if (currentIndex === 0) {
+      const dismissed =
+        typeof window !== "undefined" &&
+        sessionStorage.getItem(swipeHintStorageKey) === "true";
+      setShouldShowSwipeHint(!dismissed);
+    } else {
       setShouldShowSwipeHint(false);
     }
-  }, [currentIndex, sessionState]);
+  }, [currentIndex, sessionState, swipeHintStorageKey]);
 
   // Recording timer
   useEffect(() => {
@@ -590,8 +652,8 @@ const getInterviewerFocus = (
   }, [isRecording]);
 
   const hideSwipeHint = () => {
-    if (!hasDismissedSwipeHintRef.current) {
-      hasDismissedSwipeHintRef.current = true;
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem(swipeHintStorageKey, "true");
     }
     setShouldShowSwipeHint(false);
   };
@@ -687,7 +749,9 @@ const getInterviewerFocus = (
       return;
     }
     persistPracticeDefaults();
-    hasDismissedSwipeHintRef.current = false;
+    if (typeof window !== "undefined") {
+      sessionStorage.removeItem(swipeHintStorageKey);
+    }
     setShouldShowSwipeHint(true);
     setIsVerticalScrollGuarded(false);
     setSetupStep(0);
@@ -721,7 +785,9 @@ const getInterviewerFocus = (
       setTempShowFavoritesOnly(false);
     }
     setSelectedPreset(null);
-    hasDismissedSwipeHintRef.current = false;
+    if (typeof window !== "undefined") {
+      sessionStorage.removeItem(swipeHintStorageKey);
+    }
     setShouldShowSwipeHint(false);
     setIsVerticalScrollGuarded(false);
   };
@@ -805,6 +871,9 @@ const getInterviewerFocus = (
         
         // Save question time
         setQuestionTimers(prev => new Map(prev).set(questionId, timeSpent));
+
+        clearAutosavedAnswer(questionId);
+        setAutosaveState('saved');
         
         // Check if this is the last question
         if (currentIndex >= questions.length - 1) {
@@ -874,6 +943,19 @@ const getInterviewerFocus = (
     company: searchData?.company,
     role: searchData?.role
   });
+
+  const answeredLookup = useMemo(() => {
+    const lookup: Record<string, boolean> = {};
+    questions.forEach(q => {
+      lookup[q.id] = q.answered;
+    });
+    return lookup;
+  }, [questions]);
+
+  const questionOrder = useMemo(
+    () => questions.map(q => ({ id: q.id, stage: q.stage_name })),
+    [questions]
+  );
 
   // Swipe handlers
   const handleSwipeLeft = () => {
@@ -1437,8 +1519,8 @@ const getInterviewerFocus = (
     <div className="min-h-screen bg-background">
       <Navigation />
       <div
-        className="container mx-auto px-4 py-4 max-w-4xl"
-        style={{ paddingBottom: "calc(140px + env(safe-area-inset-bottom))" }}
+        className="container mx-auto max-w-4xl px-4 py-4"
+        style={{ paddingBottom: "calc(8rem + env(safe-area-inset-bottom))" }}
       >
         {/* Compact Header */}
         <div className="flex flex-col gap-3 mb-4">
@@ -1470,7 +1552,7 @@ const getInterviewerFocus = (
         </div>
 
         {/* Main Question Card - Mobile Optimized */}
-        <div className="max-w-2xl mx-auto relative">
+        <div className="relative mx-auto max-w-2xl">
           {/* Swipe Indicator Overlay */}
           {swipeDirection && (
             <div 
@@ -1501,33 +1583,19 @@ const getInterviewerFocus = (
             </div>
           )}
 
-          <Card 
-            className={`overflow-hidden transition-transform duration-200 ${
-              swipeDirection === 'left' ? 'transform -translate-x-2' :
-              swipeDirection === 'right' ? 'transform translate-x-2' :
-              ''
-            }`}
+          <QuestionFrame
+            className={
+              swipeDirection === 'left'
+                ? 'transform -translate-x-2'
+                : swipeDirection === 'right'
+                  ? 'transform translate-x-2'
+                  : ''
+            }
             {...swipeHandlers}
           >
             <CardHeader className="pb-4">
               {sessionState === 'inProgress' && shouldShowSwipeHint && (
-                <div className="mb-4 flex flex-wrap items-center justify-center gap-3 rounded-full bg-muted px-4 py-2 text-[11px] text-muted-foreground">
-                  <span className="flex items-center gap-1 text-foreground">
-                    <ArrowLeft className="h-3 w-3" />
-                    Swipe to skip
-                  </span>
-                  <span className="flex items-center gap-1 text-foreground">
-                    <Star className="h-3 w-3" />
-                    Swipe to favorite
-                  </span>
-                  <button
-                    type="button"
-                    onClick={handleDismissSwipeHint}
-                    className="font-medium text-primary underline-offset-2 hover:underline"
-                  >
-                    Got it
-                  </button>
-                </div>
+                <HintBanner onDismiss={handleDismissSwipeHint} />
               )}
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
@@ -1631,86 +1699,107 @@ const getInterviewerFocus = (
             </CardHeader>
             
             <CardContent className="space-y-4">
-              {/* Voice Recording Section - PRIORITIZED */}
-              <div className="bg-gradient-to-r from-primary/5 to-primary/10 rounded-lg p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="font-medium text-sm">Voice Answer (Local preview only)</h3>
+              <PracticeHelperDrawer
+                key={`helpers-${currentQuestion.id}`}
+                defaultOpen={currentIndex === 0}
+              >
+                <div className="space-y-4">
+                  <div className="space-y-3 rounded-xl bg-gradient-to-r from-primary/5 to-primary/10 p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="text-sm font-medium">Voice answer (local preview)</h3>
+                        <p className="text-xs text-muted-foreground">
+                          Audio stays on this device until uploads ship.
+                        </p>
+                      </div>
+                      {isRecording && (
+                        <div className="flex items-center gap-2 text-sm text-red-600">
+                          <div className="h-2 w-2 animate-pulse rounded-full bg-red-500" />
+                          Recording: {formatTime(recordingTime)}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      {!isRecording && !hasRecording && (
+                        <Button 
+                          onClick={startRecording}
+                          className="flex-1 h-12 bg-primary hover:bg-primary/90"
+                        >
+                          <Mic className="mr-2 h-4 w-4" />
+                          Start Recording
+                        </Button>
+                      )}
+                      
+                      {isRecording && (
+                        <Button 
+                          onClick={stopRecording}
+                          variant="destructive"
+                          className="flex-1 h-12"
+                        >
+                          <Square className="mr-2 h-4 w-4" />
+                          Stop Recording
+                        </Button>
+                      )}
+                      
+                      {hasRecording && !isRecording && (
+                        <div className="flex flex-1 flex-wrap items-center gap-2">
+                          <Button 
+                            onClick={playRecording}
+                            variant="outline"
+                            className="flex-1 h-12 min-w-[140px]"
+                          >
+                            <Play className="mr-2 h-4 w-4" />
+                            Play ({formatTime(recordingTime)})
+                          </Button>
+                          <Button 
+                            onClick={clearRecording}
+                            variant="outline"
+                            size="sm"
+                            className="h-12 px-3"
+                          >
+                            <RotateCcw className="h-4 w-4" />
+                          </Button>
+                          <Button 
+                            onClick={startRecording}
+                            variant="outline"
+                            size="sm"
+                            className="h-12 px-3"
+                          >
+                            <MicOff className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-sm text-muted-foreground">Notes (optional)</label>
+                      <span
+                        className={`text-xs ${
+                          autosaveState === 'saved' ? 'text-green-600' : 'text-muted-foreground'
+                        }`}
+                      >
+                        {autosaveState === 'saving'
+                          ? 'Saving…'
+                          : autosaveState === 'saved'
+                            ? 'Saved'
+                            : 'Autosave ready'}
+                      </span>
+                    </div>
+                    <Textarea
+                      value={currentAnswer}
+                      onChange={(e) => handleAnswerChange(e.target.value)}
+                      placeholder="Capture key points or bulleted responses…"
+                      className="min-h-[80px] resize-none text-sm"
+                    />
                     <p className="text-xs text-muted-foreground">
-                      Audio stays on this device until uploads ship.
+                      Notes auto-save locally every 5 seconds and stay with this device until you save the answer.
                     </p>
                   </div>
-                  {isRecording && (
-                    <div className="flex items-center gap-2 text-sm text-red-600">
-                      <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
-                      Recording: {formatTime(recordingTime)}
-                    </div>
-                  )}
                 </div>
-                
-                <div className="flex flex-col sm:flex-row gap-2">
-                  {!isRecording && !hasRecording && (
-                    <Button 
-                      onClick={startRecording}
-                      className="flex-1 bg-primary hover:bg-primary/90 h-12"
-                    >
-                      <Mic className="h-4 w-4 mr-2" />
-                      Start Recording
-                    </Button>
-                  )}
-                  
-                  {isRecording && (
-                    <Button 
-                      onClick={stopRecording}
-                      variant="destructive"
-                      className="flex-1 h-12"
-                    >
-                      <Square className="h-4 w-4 mr-2" />
-                      Stop Recording
-                    </Button>
-                  )}
-                  
-                  {hasRecording && !isRecording && (
-                    <>
-                      <Button 
-                        onClick={playRecording}
-                        variant="outline"
-                        className="flex-1 h-12"
-                      >
-                        <Play className="h-4 w-4 mr-2" />
-                        Play ({formatTime(recordingTime)})
-                      </Button>
-                      <Button 
-                        onClick={clearRecording}
-                        variant="outline"
-                        size="sm"
-                        className="h-12 px-3"
-                      >
-                        <RotateCcw className="h-4 w-4" />
-                      </Button>
-                      <Button 
-                        onClick={startRecording}
-                        variant="outline"
-                        size="sm"
-                        className="h-12 px-3"
-                      >
-                        <MicOff className="h-4 w-4" />
-                      </Button>
-                    </>
-                  )}
-                </div>
-              </div>
-
-              {/* Notes Section - Smaller */}
-              <div className="space-y-2">
-                <label className="text-sm text-muted-foreground">Notes (Optional)</label>
-                <Textarea
-                  value={currentAnswer}
-                  onChange={(e) => handleAnswerChange(e.target.value)}
-                  placeholder="Add any notes or key points here..."
-                  className="min-h-[80px] resize-none text-sm"
-                />
-              </div>
+              </PracticeHelperDrawer>
               
               {/* Action Buttons */}
               <div className="space-y-3 pt-2">
@@ -1757,52 +1846,18 @@ const getInterviewerFocus = (
                 </div>
               </div>
             </CardContent>
-          </Card>
+          </QuestionFrame>
         </div>
 
-        {/* Navigation - Fixed at bottom on mobile */}
-        <div
-          className="flex w-full items-center justify-between max-w-2xl mx-auto mt-6 md:sticky md:bottom-4 bg-background rounded-3xl md:rounded-full border p-3 md:p-2 shadow-none md:shadow-lg md:bg-background/95 md:backdrop-blur-sm"
-          style={{ paddingBottom: "calc(0.5rem + env(safe-area-inset-bottom))" }}
-        >
-          <Button
-            variant="outline"
-            onClick={previousQuestion}
-            disabled={currentIndex === 0}
-            className="rounded-full w-10 h-10 p-0"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          
-          {/* Question Indicators - Scrollable */}
-          <div className="flex items-center gap-2 px-2 overflow-x-auto max-w-[260px] scrollbar-hide">
-            {questions.map((question, index) => (
-              <button
-                key={question.id}
-                onClick={() => jumpToQuestion(index)}
-                type="button"
-                aria-current={index === currentIndex ? "true" : undefined}
-                title={`Go to question ${index + 1}`}
-                aria-label={`Go to question ${index + 1}${question.answered ? ' (answered)' : ''}`}
-                className={`w-3 h-3 rounded-full transition-all duration-200 flex-shrink-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${
-                  index === currentIndex 
-                    ? 'bg-primary scale-150' 
-                    : question.answered 
-                      ? 'bg-green-500 hover:scale-125' 
-                      : 'bg-muted hover:bg-muted-foreground/50 hover:scale-125'
-                }`}
-              />
-            ))}
-          </div>
-          
-          <Button
-            onClick={nextQuestion}
-            disabled={currentIndex >= questions.length - 1}
-            className="rounded-full w-10 h-10 p-0"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
+        <BottomPracticeNav
+          currentIndex={currentIndex}
+          totalQuestions={questions.length}
+          answeredMap={answeredLookup}
+          questionOrder={questionOrder}
+          onPrev={previousQuestion}
+          onNext={nextQuestion}
+          onJump={jumpToQuestion}
+        />
       </div>
     </div>
   );
