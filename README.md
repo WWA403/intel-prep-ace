@@ -43,17 +43,19 @@ A modern, AI-powered interview preparation tool that helps small circles of frie
 
 ## 📚 Documentation Hub
 
-All documentation now lives in a single navigation surface so you don't need to jump into `docs/README.md` anymore.
+All documentation now lives in a single navigation surface.
 
 | Document | Why you need it | Notes |
 |----------|-----------------|-------|
 | [`CLAUDE.md`](./CLAUDE.md) | End-to-end developer playbook | Start here for architecture, commands, and workflows. |
-| [`docs/RESEARCH_PIPELINE_IMPROVEMENTS.md`](./docs/RESEARCH_PIPELINE_IMPROVEMENTS.md) | Pipeline optimization backlog | Use for planning perf work. |
+| [`docs/ENHANCEMENT_PLAN.md`](./docs/ENHANCEMENT_PLAN.md) | Codebase audit, bugs, and roadmap | Comprehensive enhancement plan with prioritized fixes. |
 | [`docs/UI_UX_ENHANCEMENT_PLAN.md`](./docs/UI_UX_ENHANCEMENT_PLAN.md) | Design backlog and heuristics | Reference when shipping UI polish. |
+| [`docs/RESEARCH_PIPELINE_IMPROVEMENTS.md`](./docs/RESEARCH_PIPELINE_IMPROVEMENTS.md) | Pipeline optimization backlog | Use for planning perf work. |
+| [`docs/TESTING.md`](./docs/TESTING.md) | Testing guidance and coverage | Test suite layout and backlog. |
 
 ### Role-Based Fast Track
-- **Developers:** Inspect `supabase/functions/interview-research/index.ts`, then follow `CLAUDE.md` commands.
-- **Operations/DevOps:** Follow `docs/DEPLOYMENT_GUIDE.md` in order: DB migration → Edge Functions → smoke tests → monitoring.
+- **Developers:** Start with `CLAUDE.md`, then check `docs/ENHANCEMENT_PLAN.md` for current bugs and priorities.
+- **Operations/DevOps:** Follow `CLAUDE.md` deployment commands: DB migration → Edge Functions → smoke tests.
 - **Product & Stakeholders:** Skim the UI/UX plan for roadmap context.
 
 ### Key Files to Know
@@ -135,7 +137,7 @@ All documentation now lives in a single navigation surface so you don't need to 
 - Add redirect-aware banner on `/auth` (“Sign in to resume Practice”).
 
 ### 🧪 Testing Backlog
-High-level testing initiatives we still need to land before reopening sign-ups. Detailed acceptance notes live in [`docs/TESTING_BACKLOG.md`](./docs/TESTING_BACKLOG.md).
+High-level testing initiatives we still need to land before reopening sign-ups. See [`docs/TESTING.md`](./docs/TESTING.md) for detailed test coverage.
 
 1. **[P0] Search artifact persistence:** regression nets around `search_artifacts` upsert flows, `cv_job_comparisons`, and comparison data surfaced through `searchService`.
 2. **[P0] Progress & stall UI:** component coverage for `ProgressDialog`, `useSearchProgress`, and stalled-job retry/telemetry.
@@ -144,7 +146,7 @@ High-level testing initiatives we still need to land before reopening sign-ups. 
 5. **[P2] Tavily analytics math:** unit coverage for credit totals, success rates, and company-frequency aggregation in `tavilyAnalyticsService`.
 
 ### 📚 Historical Context
-- Completed epics (seniority personalization, sampler, favorites, swipe gestures) now live inside the product; see `docs/IMPLEMENTATION_CHANGES.md` for deep dives.
+- Completed epics (seniority personalization, sampler, favorites, swipe gestures) now live inside the product.
 - Audio transcription, timer presets, analytics dashboards stay parked until the above priorities land.
 
 ## 🏗️ Architecture
@@ -524,24 +526,25 @@ Per-Search Override:
 ## 📖 Documentation
 
 ### Core Documentation
-- **[Product Design Document](docs/PRODUCT_DESIGN.md)** - Product vision, features, and user journeys
-- **[Technical Design Document](docs/TECHNICAL_DESIGN.md)** - Complete system architecture and implementation details
-- **[Development Guide](docs/DEVELOPMENT_GUIDE.md)** - Practical patterns and day-to-day development workflows
-- **[Implementation Changes](docs/IMPLEMENTATION_CHANGES.md)** - Development progress tracking and phase completions
+- **[CLAUDE.md](./CLAUDE.md)** - Developer playbook: architecture, commands, and workflows (start here)
+- **[docs/ENHANCEMENT_PLAN.md](docs/ENHANCEMENT_PLAN.md)** - Codebase audit, bugs, and prioritized roadmap
+- **[docs/UI_UX_ENHANCEMENT_PLAN.md](docs/UI_UX_ENHANCEMENT_PLAN.md)** - Design backlog and UX heuristics
+- **[docs/RESEARCH_PIPELINE_IMPROVEMENTS.md](docs/RESEARCH_PIPELINE_IMPROVEMENTS.md)** - Pipeline optimization and quality improvements
+- **[docs/TESTING.md](docs/TESTING.md)** - Testing guidance and coverage
 
 ### Quick Start for Developers
-1. **New to the project?** Start with [Product Design](docs/PRODUCT_DESIGN.md) for context
-2. **Setting up development?** Follow [Development Guide - Getting Started](docs/DEVELOPMENT_GUIDE.md#getting-started)
-3. **Understanding the architecture?** See [Technical Design](docs/TECHNICAL_DESIGN.md)
-4. **Daily development?** Use [Development Guide](docs/DEVELOPMENT_GUIDE.md) as your reference
+1. **New to the project?** Start with [CLAUDE.md](./CLAUDE.md) for architecture overview
+2. **Setting up development?** Follow the Quick Start section in this README
+3. **Understanding bugs/roadmap?** See [docs/ENHANCEMENT_PLAN.md](docs/ENHANCEMENT_PLAN.md)
+4. **Working on UI?** Reference [docs/UI_UX_ENHANCEMENT_PLAN.md](docs/UI_UX_ENHANCEMENT_PLAN.md)
 
 ---
 
 ### 🛠️ Contributing to the Backlog
 **Before Starting Work**
-1. Check the priority board above and confirm ownership in Slack.
-2. Read the full PRD in `docs/PRODUCT_DESIGN.md` and relevant deep dives.
-3. Review technical design in `docs/TECHNICAL_DESIGN.md`.
+1. Check the priority board above and confirm ownership.
+2. Review [CLAUDE.md](./CLAUDE.md) for architecture context.
+3. Check [docs/ENHANCEMENT_PLAN.md](docs/ENHANCEMENT_PLAN.md) for current bugs and priorities.
 4. Create a branch (`feature/<initiative>-short-slug`).
 
 **During Development**
@@ -552,7 +555,7 @@ Per-Search Override:
 
 **After Completion**
 1. Mark the initiative as shipped with a date in this README.
-2. Append a short summary to `docs/IMPLEMENTATION_CHANGES.md`.
+2. Update [docs/ENHANCEMENT_PLAN.md](docs/ENHANCEMENT_PLAN.md) with progress.
 3. Link QA notes or Supabase logs in the PR description.
 4. Tag product/design for sign-off when UI or copy changed.
 
