@@ -437,7 +437,7 @@ The system underwent a major architectural redesign to improve reliability and p
 
 **For detailed information**, see:
 - `docs/RESEARCH_PIPELINE_IMPROVEMENTS.md` - Pipeline optimization backlog and deep dives
-- `docs/DEPLOYMENT_GUIDE.md` - Deployment procedures
+- `docs/ENHANCEMENT_PLAN.md` - Codebase audit, bugs, and prioritized roadmap
 - `README.md` (Documentation Hub) - Single navigation surface
 
 **Key Changes**:
@@ -463,8 +463,9 @@ The system underwent a major architectural redesign to improve reliability and p
 
 ### Getting Help
 - **Documentation**: See the Documentation Hub in `README.md` for navigation to all guides
-- **Architecture**: Review the “Recent Architecture Changes” section above or `docs/RESEARCH_PIPELINE_IMPROVEMENTS.md` for system design details
-- **Deployment**: See `docs/DEPLOYMENT_GUIDE.md` for deployment procedures
+- **Architecture**: Review the "Recent Architecture Changes" section above or `docs/RESEARCH_PIPELINE_IMPROVEMENTS.md` for system design details
+- **Deployment**: Use `npm run functions:deploy` for Edge Functions; see "Development Commands" section above
+- **Bugs & Roadmap**: See `docs/ENHANCEMENT_PLAN.md` for current issues and priorities
 - **Logs**: Check Supabase Dashboard → Functions → Logs for detailed error information
 
 ## Security
